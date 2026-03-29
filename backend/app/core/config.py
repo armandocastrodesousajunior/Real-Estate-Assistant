@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     OPENROUTER_SITE_URL: str = "http://localhost:5173"
     OPENROUTER_SITE_NAME: str = "Real-Estate-Assistant"
 
+    # Agents
+    MAX_AGENT_HOPS: int = 2
+
     # Uploads
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 10

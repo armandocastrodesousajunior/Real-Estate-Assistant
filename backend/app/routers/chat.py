@@ -8,6 +8,7 @@ from typing import Optional, List, AsyncGenerator
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.config import settings
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.agent import Agent
 from app.schemas.chat import ChatRequest, ChatResponse, ConversationResponse, ConversationDetailResponse, MessageResponse
@@ -99,7 +100,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     async def event_stream() -> AsyncGenerator[str, None]:
         nonlocal agent_slug, agent_name, agent_emoji, agent_color, trace_log
         
-        max_redirects = 1
+        max_redirects = settings.MAX_AGENT_HOPS
         current_redirect = 0
         response_text = ""
 
@@ -124,20 +125,19 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             except AgentRedirectSignal as redirect:
                 old_slug = agent_slug
                 
-                # Se já rodou o fallback e ele tentou redirecionar também, desiste pra não gerar loop infinito
-                if current_redirect > max_redirects:
-                    error_msg = "\n\n⚠️ Desculpe, não consegui entender qual especialista acionar para esta solicitação."
+                # Se já atingiu o limite de saltos permitidos, encerra sem chamar novo agente
+                if current_redirect >= max_redirects:
+                    error_msg = "\n\n⚠️ Limite de redirecionamentos atingido. Não foi possível completar sua solicitação."
                     yield f'data: {json.dumps({"type": "token", "content": error_msg})}\n\n'
                     response_text += error_msg
+                    
+                    step_log["success"] = False
+                    step_log["error"] = "Max redirects reached"
+                    trace_log["calls"].append(step_log)
                     break
 
-                if current_redirect == max_redirects:
-                    # Estouro de redirects permitidos: repassa forçado pro customer service
-                    agent_slug = "customer_service"
-                    target_slug_reason = f"Fallback Automático: A inteligência atingiu o limite de saltos de delegação, retornando para customer_service."
-                else:
-                    agent_slug = redirect.target_slug
-                    target_slug_reason = redirect.reason
+                agent_slug = redirect.target_slug
+                target_slug_reason = redirect.reason
                 
                 # Salva o log do passo que falhou/redirecionou
                 step_log["success"] = False
