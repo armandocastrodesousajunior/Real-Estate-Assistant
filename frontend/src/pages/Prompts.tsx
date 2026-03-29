@@ -24,12 +24,13 @@ export default function Prompts() {
   const loadAll = async () => {
     setLoading(true)
     const [agentsRes, promptsRes] = await Promise.all([agentsAPI.list(), promptsAPI.list()])
-    setAgents(agentsRes.data)
+    const visibleAgents = agentsRes.data.filter((a: Agent) => a.slug !== 'supervisor')
+    setAgents(visibleAgents)
     const promptMap: Record<string, Prompt> = {}
     promptsRes.data.forEach((p: Prompt) => { promptMap[p.agent_slug] = p })
     setPrompts(promptMap)
-    if (agentsRes.data.length > 0) {
-      const first = agentsRes.data[0].slug
+    if (visibleAgents.length > 0) {
+      const first = visibleAgents[0].slug
       setSelected(first)
       setEditedPrompt(promptMap[first]?.system_prompt || '')
       setNotes(promptMap[first]?.notes || '')

@@ -12,14 +12,6 @@ from loguru import logger
 import os
 
 
-AGENT_SLUGS = [
-    "supervisor",
-    "property_finder",
-    "pricing_analyst",
-    "customer_service",
-    "listing_writer",
-    "market_analyst",
-]
 
 
 async def get_agent_config(db: AsyncSession, slug: str) -> Optional[Agent]:
@@ -36,8 +28,8 @@ async def get_agent_prompt(db: AsyncSession, slug: str) -> Optional[str]:
     return prompt.system_prompt if prompt else None
 
 
-async def get_agents_directory(db: AsyncSession, exclude_slug: str) -> str:
-    """Busca todos os agentes ativos exceto o atual e constrói o diretório Markdown usando o campo Description"""
+async def get_agents_directory(db: AsyncSession, exclude_slug: str) -> tuple[str, list[str]]:
+    """Busca todos os agentes ativos exceto o atual e retorna o diretório Markdown e a lista de slugs"""
     result = await db.execute(
         select(Agent).where(
             Agent.is_active == True, 
@@ -48,13 +40,15 @@ async def get_agents_directory(db: AsyncSession, exclude_slug: str) -> str:
     agents = result.scalars().all()
     
     directory = []
+    slugs = []
     for agent in agents:
         desc = agent.description or "(Sem descrição detalhada)"
+        slugs.append(agent.slug)
         # Formata o bloco do agente combinando slug + descrição do campo description
         agent_block = f"## Agente: {agent.slug}\n\n**Slug:** `{agent.slug}`\n\n{desc.strip()}"
         directory.append(agent_block)
             
-    return "\n\n---\n\n".join(directory)
+    return "\n\n---\n\n".join(directory), slugs
 
 
 def get_internal_prompt(filename: str) -> str:
@@ -94,10 +88,37 @@ async def route_to_agent(
     # Lógica do Supervisor: Carregada 100% do arquivo interno (não editável no banco)
     full_system = get_internal_prompt("supervisor_logic.md")
     
-    # Injeta diretório dinâmico de todos os agentes especialistas
+    # Injeta diretório dinâmico e JSON Schema de todos os agentes especialistas
+    directory, slugs = await get_agents_directory(db, exclude_slug="supervisor")
+    
     if "{{AGENTS_DIRECTORY}}" in full_system:
-        directory = await get_agents_directory(db, exclude_slug="supervisor")
         full_system = full_system.replace("{{AGENTS_DIRECTORY}}", directory)
+    
+    if "{{RESPONSE_SCHEMA}}" in full_system:
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "SupervisorResponse",
+            "description": "Resposta do Supervisor do Real-Estate-Assistant com o agente selecionado para atender a mensagem do usuário.",
+            "type": "object",
+            "required": ["selected_agent", "reason"],
+            "additionalProperties": False,
+            "properties": {
+                "selected_agent": {
+                    "type": "string",
+                    "description": "Slug único do agente especialista selecionado para responder a mensagem do usuário.",
+                    "enum": slugs,
+                    "examples": slugs[:3] if len(slugs) >= 3 else slugs
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Explicação técnica curta justificando a escolha do agente com base nas competências descritas no diretório.",
+                    "minLength": 10,
+                    "maxLength": 300
+                }
+            }
+        }
+        schema_json = json.dumps(schema, indent=2, ensure_ascii=False)
+        full_system = full_system.replace("{{RESPONSE_SCHEMA}}", f"```json\n{schema_json}\n```")
 
     routing_message = f"""Histórico recente:
 {history_text}
@@ -124,7 +145,7 @@ Qual agente deve responder?"""
             # Fallback se o JSON falhar mas o slug estiver na string
             logger.warning(f"Falha ao decodificar JSON do Supervisor. Tentando extrair slug da string bruta.")
             data = {"selected_agent": "customer_service", "reason": "Erro no parse JSON"}
-            for s in AGENT_SLUGS:
+            for s in slugs:
                 if s in clean_json.lower():
                     data["selected_agent"] = s
                     break
@@ -140,7 +161,7 @@ Qual agente deve responder?"""
             }
         }
         
-        if slug in AGENT_SLUGS:
+        if slug in slugs:
             return {"slug": slug, "debug": debug_info}
             
         return {"slug": "customer_service", "debug": debug_info}
@@ -182,7 +203,7 @@ async def run_agent_stream(
     
     # Injeta catálogo dinâmico de agentes para o Handoff
     if "{{AGENTS_DIRECTORY}}" in internal_logic:
-        directory = await get_agents_directory(db, agent_slug)
+        directory, _ = await get_agents_directory(db, agent_slug)
         internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
 
     # Montagem Final: Personalidade (DB) + Lógica (Código)

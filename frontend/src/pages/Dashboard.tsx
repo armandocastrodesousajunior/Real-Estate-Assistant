@@ -26,12 +26,17 @@ export default function Dashboard() {
           agentsAPI.list(),
         ])
         setStats({
-          properties: propRes.status === 'fulfilled' ? propRes.value.data.total : 0,
-          leads: leadRes.status === 'fulfilled' ? leadRes.value.data.total : 0,
-          conversations: convRes.status === 'fulfilled' ? convRes.value.data.length : 0,
-          agents: agentRes.status === 'fulfilled' ? agentRes.value.data.length : 0,
+          properties: propRes.status === 'fulfilled' ? (propRes.value as any).data.total : 0,
+          leads: leadRes.status === 'fulfilled' ? (leadRes.value as any).data.total : 0,
+          conversations: convRes.status === 'fulfilled' ? (convRes.value as any).data.length : 0,
+          agents: 0
         })
-        if (agentRes.status === 'fulfilled') setAgents(agentRes.value.data)
+
+        if (agentRes.status === 'fulfilled') {
+          const visible = (agentRes.value as any).data.filter((a: any) => a.slug !== 'supervisor')
+          setAgents(visible)
+          setStats(prev => ({ ...prev, agents: visible.length }))
+        }
       } finally {
         setLoading(false)
       }

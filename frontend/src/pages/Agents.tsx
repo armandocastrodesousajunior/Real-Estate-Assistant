@@ -54,7 +54,7 @@ export default function Agents() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
-        {agents.map((agent) => (
+        {agents.filter(a => a.slug !== 'supervisor').map((agent) => (
           <div key={agent.slug} className="card" style={{ opacity: agent.is_active ? 1 : 0.65 }}>
             <div className="card-header">
               <div className="flex items-center gap-3">
