@@ -19,7 +19,7 @@ export default function Layout() {
   const userName = 'Admin'
 
   const handleLogout = () => {
-    localStorage.removeItem('realtyai_token')
+    localStorage.removeItem('rea_token')
     navigate('/login')
     window.location.reload()
   }
@@ -31,7 +31,7 @@ export default function Layout() {
         <div className="sidebar-logo">
           <div className="logo-mark">
             <div className="logo-icon">🏡</div>
-            <div className="logo-text">Realty<span>AI</span></div>
+            <div className="name">Real-Estate<span>Assistant</span></div>
           </div>
         </div>
 
@@ -54,7 +54,7 @@ export default function Layout() {
             <div className="user-avatar">A</div>
             <div style={{ flex: 1 }}>
               <div className="user-name">{userName}</div>
-              <div className="user-email">admin@realtyai.com</div>
+              <div className="user-email">admin@realestateassistant.com</div>
             </div>
             <button
               className="btn btn-ghost btn-sm"

@@ -178,7 +178,7 @@ export default function Chat() {
         {messages.length === 0 && !streamingText ? (
           <div className="chat-welcome">
             <div className="chat-welcome-icon">🏡</div>
-            <h2>RealtyAI — Assistente Imobiliário</h2>
+            <h2>Real-Estate-Assistant</h2>
             <p>Converse com 6 agentes de IA especializados. Busque imóveis, analise preços, crie anúncios e muito mais.</p>
             <div className="chat-suggestions">
               {suggestions.map((s) => (

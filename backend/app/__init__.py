@@ -1,1 +1,1 @@
-# RealtyAI Backend Package
+# Real-Estate-Assistant Backend Package

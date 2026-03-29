@@ -1,5 +1,5 @@
 # ============================================================
-#  RealtyAI — Python Dependencies
+#  Real-Estate-Assistant — Python Dependencies
 #  Install via Conda:  conda env create -f environment.yml
 #  Install via pip:    pip install -r requirements.txt
 # ============================================================

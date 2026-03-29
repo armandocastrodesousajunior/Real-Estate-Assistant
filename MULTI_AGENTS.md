@@ -1,6 +1,6 @@
-# 🧠 Lógica Multi-Agentes do RealtyAI
+# 🧠 Lógica Multi-Agentes do Real-Estate-Assistant
 
-O RealtyAI não é um simples chatbot. Ele é um sistema orquestrado onde vários "Especialistas Virtuais" trabalham em conjunto para responder o usuário da melhor forma possível, economizando tokens e melhorando a qualidade de resposta.
+O Real-Estate-Assistant não é um simples chatbot. Ele é um sistema orquestrado onde vários "Especialistas Virtuais" trabalham em conjunto para responder o usuário da melhor forma possível, economizando tokens e melhorando a qualidade de resposta.
 
 Neste documento, explicamos detalhadamente como funciona o roteamento e a execução dos agentes.
 
@@ -40,7 +40,7 @@ O Orquestrador então busca no banco de dados o **System Prompt**, **Modelo Open
 Ele envia a mensagem original do usuário para a API do OpenRouter, mas **injetando o contexto e o System Prompt** focado apenas em achar imóveis. 
 
 #### Passo 5: Streaming da Resposta (SSE)
-Assim que o OpenRouter começa a responder (`backend/app/agents/openrouter.py`), a API do RealtyAI vai mastigando pedaço por pedaço e devolvendo em tempo real (`yield`) para o Frontend. 
+Assim que o OpenRouter começa a responder (`backend/app/agents/openrouter.py`), a API do Real-Estate-Assistant vai mastigando pedaço por pedaço e devolvendo em tempo real (`yield`) para o Frontend. 
 
 Isso dá aquele feito visual estilo ChatGPT do texto sendo digitado na hora, garantindo performance e rapidez percebida pelo cliente humano.
 

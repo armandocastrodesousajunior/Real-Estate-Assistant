@@ -25,8 +25,8 @@ async def login(credentials: LoginRequest):
     """
     Realiza login com as credenciais do administrador configuradas no `.env`.
 
-    - Email padrão: `admin@realtyai.com`
-    - Senha padrão: `realtyai2024`
+    - Email padrão: `admin@realestateassistant.com`
+    - Senha padrão: `rea2024`
 
     Configure `ADMIN_EMAIL` e `ADMIN_PASSWORD` no arquivo `.env` para mudar.
     """

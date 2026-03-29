@@ -4,8 +4,8 @@ import { authAPI } from '../services/api'
 interface Props { onLogin: () => void }
 
 export default function Login({ onLogin }: Props) {
-  const [email, setEmail] = useState('admin@realtyai.com')
-  const [password, setPassword] = useState('realtyai2024')
+  const [email, setEmail] = useState('admin@realestateassistant.com')
+  const [password, setPassword] = useState('rea2024')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -15,7 +15,7 @@ export default function Login({ onLogin }: Props) {
     setError('')
     try {
       const { data } = await authAPI.login(email, password)
-      localStorage.setItem('realtyai_token', data.access_token)
+      localStorage.setItem('rea_token', data.access_token)
       onLogin()
     } catch {
       setError('Email ou senha inválidos.')
@@ -29,7 +29,7 @@ export default function Login({ onLogin }: Props) {
       <div className="login-card">
         <div className="login-logo">
           <div className="icon">🏡</div>
-          <div className="name">Realty<span>AI</span></div>
+          <div className="name">Real-Estate<span>Assistant</span></div>
         </div>
 
         <div className="login-title">Bem-vindo de volta</div>
@@ -75,8 +75,8 @@ export default function Login({ onLogin }: Props) {
 
         <div style={{ marginTop: '24px', padding: '14px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
           <div className="text-xs text-muted" style={{ marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Credenciais padrão</div>
-          <div className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>📧 admin@realtyai.com</div>
-          <div className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>🔑 realtyai2024</div>
+          <div className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>📧 admin@realestateassistant.com</div>
+          <div className="text-sm font-mono" style={{ color: 'var(--text-secondary)' }}>🔑 rea2024</div>
         </div>
       </div>
     </div>

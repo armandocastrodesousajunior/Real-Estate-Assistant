@@ -1,14 +1,14 @@
 # ============================================================
-#  RealtyAI — Conda Environment
+#  Real-Estate-Assistant — Conda Environment
 #  
 #  Criar ambiente:   conda env create -f environment.yml
-#  Ativar:           conda activate realtyai
+#  Ativar:           conda activate real-estate-assistant
 #  Atualizar:        conda env update -f environment.yml --prune
 #  Exportar atual:   conda env export > environment.yml
-#  Remover:          conda env remove -n realtyai
+#  Remover:          conda env remove -n real-estate-assistant
 # ============================================================
 
-name: realtyai
+name: real-estate-assistant
 
 channels:
   - conda-forge        # Repositório principal (mais atualizado)

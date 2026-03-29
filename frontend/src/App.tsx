@@ -12,10 +12,10 @@ import Leads from './pages/Leads'
 import Logs from './pages/Logs'
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('realtyai_token'))
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('rea_token'))
 
   useEffect(() => {
-    const check = () => setIsLoggedIn(!!localStorage.getItem('realtyai_token'))
+    const check = () => setIsLoggedIn(!!localStorage.getItem('rea_token'))
     window.addEventListener('storage', check)
     return () => window.removeEventListener('storage', check)
   }, [])

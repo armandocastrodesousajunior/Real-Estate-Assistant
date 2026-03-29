@@ -52,7 +52,7 @@ export default function Dashboard() {
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Dashboard</h1>
-          <p className="page-header-sub">Visão geral do sistema RealtyAI</p>
+          <p className="page-header-sub">Visão geral do sistema Real-Estate-Assistant</p>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/chat')}>
           <MessageSquare size={16} />

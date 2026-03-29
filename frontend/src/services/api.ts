@@ -10,7 +10,7 @@ export const api = axios.create({
 
 // Injeta token JWT automaticamente
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('realtyai_token')
+  const token = localStorage.getItem('rea_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -20,7 +20,7 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('realtyai_token')
+      localStorage.removeItem('rea_token')
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -88,7 +88,7 @@ export const promptsAPI = {
 export const chatAPI = {
   /** Cria um EventSource para streaming SSE */
   streamChat: (message: string, sessionId?: string) => {
-    const token = localStorage.getItem('realtyai_token')
+    const token = localStorage.getItem('rea_token')
     return fetch(`${BASE_URL}/api/v1/chat/`, {
       method: 'POST',
       headers: {

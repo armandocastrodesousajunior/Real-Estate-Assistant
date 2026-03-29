@@ -138,18 +138,18 @@ async def lifespan(app: FastAPI):
     # Popula dados iniciais
     await seed_database()
 
-    logger.info("✅ RealtyAI API ready!")
+    logger.info("✅ Real-Estate-Assistant API ready!")
     yield
 
     # Shutdown
     await engine.dispose()
-    logger.info("👋 RealtyAI API shut down.")
+    logger.info("👋 Real-Estate-Assistant API shut down.")
 
 
 app = FastAPI(
-    title="RealtyAI — Sistema Multi-Agentes para Imobiliária",
+    title="Real-Estate-Assistant — Sistema Multi-Agentes para Imobiliária",
     description="""
-## 🏡 RealtyAI API
+## 🏡 Real-Estate-Assistant API
 
 Sistema avançado de inteligência artificial para imobiliárias com **6 agentes especializados** orquestrados por IA.
 
@@ -192,8 +192,8 @@ Eventos: `agent_selected`, `token`, `done`.
     """,
     version=settings.APP_VERSION,
     contact={
-        "name": "RealtyAI Support",
-        "email": "support@realtyai.com",
+        "name": "Real-Estate-Assistant Support",
+        "email": "support@realestateassistant.com",
     },
     license_info={"name": "MIT License"},
     lifespan=lifespan,
@@ -228,6 +228,7 @@ app.include_router(agents.router,     prefix="/api/v1/agents",     tags=["🤖 A
 app.include_router(prompts.router,    prefix="/api/v1/prompts",    tags=["🎛️ Prompts"])
 app.include_router(chat.router,       prefix="/api/v1/chat",       tags=["💬 Chat"])
 app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
+app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
 app.include_router(logs.router,       prefix="/api/v1/logs",       tags=["📜 Logs"])
 
 # ─── Root endpoints ───────────────────────────────────────────────────────────
@@ -235,7 +236,7 @@ app.include_router(logs.router,       prefix="/api/v1/logs",       tags=["📜 L
 @app.get("/", tags=["📊 Status"], include_in_schema=False)
 async def root():
     return {
-        "service": "RealtyAI API",
+        "service": "Real-Estate-Assistant API",
         "version": settings.APP_VERSION,
         "status": "online",
         "docs": "/docs",

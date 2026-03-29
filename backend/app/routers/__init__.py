@@ -1,1 +1,1 @@
-# RealtyAI - Package Init
+# Real-Estate-Assistant - Package Init

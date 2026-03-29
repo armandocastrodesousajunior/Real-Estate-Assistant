@@ -1,4 +1,4 @@
-# 🏡 RealtyAI — Sistema Multi-Agentes para Imobiliária
+# 🏡 Real-Estate-Assistant — Sistema Multi-Agentes para Imobiliária
 
 Sistema avançado de inteligência artificial para imobiliárias com **6 agentes IA especializados**, API documentada via Swagger, painel de gestão de imóveis e editor de prompts.
 
@@ -11,7 +11,7 @@ Sistema avançado de inteligência artificial para imobiliárias com **6 agentes
 ```bash
 # Na raiz do projeto
 conda env create -f environment.yml
-conda activate realtyai
+conda activate real-estate-assistant
 ```
 
 ### 2. Configurar variáveis de ambiente
@@ -44,8 +44,8 @@ Acesse o painel em: **http://localhost:5173**
 
 ### 5. Login
 
-- **Email:** `admin@realtyai.com`
-- **Senha:** `realtyai2024`
+- **Email:** `admin@realestateassistant.com`
+- **Senha:** `rea2024`
 
 > Configure em `backend/.env` com `ADMIN_EMAIL` e `ADMIN_PASSWORD`
 
@@ -54,7 +54,7 @@ Acesse o painel em: **http://localhost:5173**
 ## 🏗️ Arquitetura
 
 ```
-RealtyAI/
+Real-Estate-Assistant/
 ├── backend/                 # API FastAPI + Python
 │   ├── app/
 │   │   ├── main.py          # FastAPI app + Swagger
@@ -125,11 +125,11 @@ const reader = response.body.getReader()
 
 | Variável | Descrição | Padrão |
 |---|---|---|
-| `DATABASE_URL` | URL do banco SQLite/PostgreSQL | `sqlite+aiosqlite:///./realtyai.db` |
+| `DATABASE_URL` | URL do banco SQLite/PostgreSQL | `sqlite+aiosqlite:///./real_estate_assistant.db` |
 | `OPENROUTER_API_KEY` | Chave da API OpenRouter | — |
 | `JWT_SECRET_KEY` | Chave secreta JWT | Mude em produção! |
-| `ADMIN_EMAIL` | Email do admin | `admin@realtyai.com` |
-| `ADMIN_PASSWORD` | Senha do admin | `realtyai2024` |
+| `ADMIN_EMAIL` | Email do admin | `admin@realestateassistant.com` |
+| `ADMIN_PASSWORD` | Senha do admin | `rea2024` |
 
 ---
 
