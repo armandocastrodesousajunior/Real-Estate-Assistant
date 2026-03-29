@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Building2, MessageSquare, Bot, FileText,
+  LayoutDashboard, Building2, Bot,
   Users, LogOut, Activity, Home
 } from 'lucide-react'
 
@@ -8,9 +8,7 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/properties', icon: Building2, label: 'Imóveis' },
   { to: '/leads', icon: Users, label: 'Leads' },
-  { to: '/chat', icon: MessageSquare, label: 'Chat IA' },
-  { to: '/agents', icon: Bot, label: 'Agentes' },
-  { to: '/prompts', icon: FileText, label: 'Prompts' },
+  { to: '/playground', icon: Bot, label: 'Playground' },
   { to: '/logs', icon: Activity, label: 'System Logs' },
 ]
 

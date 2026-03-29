@@ -79,15 +79,22 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     conv.message_count += 1
     await db.flush()
 
-    # Roteia para o agente correto
-    routing_result = await route_to_agent(db, request.message, history)
+    # Roteia para o agente correto ou usa o especificado (Direct Chat)
+    if request.agent_slug:
+        routing_result = {"slug": request.agent_slug, "debug": {"reason": "Chat Direto Playground"}}
+    else:
+        routing_result = await route_to_agent(db, request.message, history)
+
     initial_agent_slug = routing_result["slug"]
     agent_slug = initial_agent_slug
     agent = await get_agent_config(db, agent_slug)
 
-    agent_name = agent.name if agent else agent_slug
-    agent_emoji = agent.emoji if agent else "🤖"
-    agent_color = agent.color if agent else "#F59E0B"
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agente {agent_slug} não encontrado ou inativo")
+
+    agent_name = agent.name
+    agent_emoji = agent.emoji
+    agent_color = agent.color
 
     # Trilha de roteamento inicial (Full Trace)
     trace_log = {

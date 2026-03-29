@@ -12,6 +12,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000, description="Mensagem do usuário")
     session_id: Optional[str] = Field(None, description="ID da sessão/conversa (omitir para nova conversa)")
+    agent_slug: Optional[str] = Field(None, description="ID do agente para chat direto (omitir para Supervisor)")
     stream: bool = Field(True, description="Usar streaming SSE")
 
 
