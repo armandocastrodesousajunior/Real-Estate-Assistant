@@ -4,16 +4,16 @@ import { leadsAPI } from '../services/api'
 
 const STATUS_OPTIONS = [
   { value: 'novo', label: 'Novo', badge: 'badge-info' },
-  { value: 'contatado', label: 'Contatado', badge: 'badge-warning' },
+  { value: 'contatado', label: 'Contatado', badge: 'badge-muted' },
   { value: 'qualificado', label: 'Qualificado', badge: 'badge-success' },
   { value: 'proposta', label: 'Proposta', badge: 'badge-warning' },
   { value: 'negociando', label: 'Negociando', badge: 'badge-info' },
-  { value: 'fechado_ganho', label: '🏆 Fechado', badge: 'badge-success' },
+  { value: 'fechado_ganho', label: 'Fechado', badge: 'badge-success' },
   { value: 'fechado_perdido', label: 'Perdido', badge: 'badge-error' },
 ]
 
 const SOURCE_LABEL: Record<string, string> = {
-  website: 'Website', chat_ia: '🤖 Chat IA', whatsapp: 'WhatsApp',
+  website: 'Website', chat_ia: 'Chat IA', whatsapp: 'WhatsApp',
   telefone: 'Telefone', indicacao: 'Indicação', portal_imovel: 'Portal',
   redes_sociais: 'Redes Sociais', outro: 'Outro',
 }
@@ -58,13 +58,12 @@ export default function Leads() {
     load()
   }
 
-  const getStatusBadge = (status: string) => STATUS_OPTIONS.find(s => s.value === status) || { badge: 'badge-muted', label: status }
 
   return (
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">👤 Leads</h1>
+          <h1 className="page-header-title">Leads</h1>
           <p className="page-header-sub">{total} leads no sistema</p>
         </div>
         <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Novo Lead</button>
@@ -106,7 +105,6 @@ export default function Leads() {
                 </div>
               </td></tr>
             ) : leads.map((lead) => {
-              const s = getStatusBadge(lead.status)
               return (
                 <tr key={lead.id}>
                   <td><div style={{ fontWeight: 600 }}>{lead.name}</div></td>

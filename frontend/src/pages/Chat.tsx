@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Send, Trash2, Activity, Search } from 'lucide-react'
+import { Plus, Send, Trash2, Activity, Search, Home } from 'lucide-react'
 import { chatAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
 
@@ -177,7 +177,7 @@ export default function Chat() {
       <div className="chat-main">
         {messages.length === 0 && !streamingText ? (
           <div className="chat-welcome">
-            <div className="chat-welcome-icon">🏡</div>
+            <div className="chat-welcome-icon"><Home size={40} /></div>
             <h2>Real-Estate-Assistant</h2>
             <p>Converse com 6 agentes de IA especializados. Busque imóveis, analise preços, crie anúncios e muito mais.</p>
             <div className="chat-suggestions">
@@ -191,15 +191,15 @@ export default function Chat() {
             {messages.map((msg, i) => (
               <div key={i} className={`message-wrapper ${msg.role}`}>
                 {msg.role === 'assistant' ? (
-                  <div className="message-avatar" style={{ background: `${msg.agentColor || '#F59E0B'}22` }}>
+                  <div className="message-avatar" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
                     {msg.agentEmoji || '🤖'}
                   </div>
                 ) : (
-                  <div className="message-avatar user-avatar-msg">A</div>
+                  <div className="message-avatar user-avatar-msg" style={{ background: '#FFF', color: '#000' }}>A</div>
                 )}
                 <div>
                   {msg.role === 'assistant' && msg.agentName && (
-                    <div className="message-agent-tag" style={{ color: msg.agentColor || 'var(--accent)' }}>
+                    <div className="message-agent-tag" style={{ color: '#A3A3A3' }}>
                       {msg.agentName}
                     </div>
                   )}
@@ -237,12 +237,12 @@ export default function Chat() {
             {/* Streaming */}
             {(isStreaming || streamingText) && (
               <div className="message-wrapper assistant">
-                <div className="message-avatar" style={{ background: `${streamingAgent?.color || '#F59E0B'}22` }}>
+                <div className="message-avatar" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
                   {streamingAgent?.emoji || '🤖'}
                 </div>
                 <div>
                   {streamingAgent && (
-                    <div className="message-agent-tag" style={{ color: streamingAgent.color }}>
+                    <div className="message-agent-tag" style={{ color: '#A3A3A3' }}>
                       {streamingAgent.name}
                     </div>
                   )}

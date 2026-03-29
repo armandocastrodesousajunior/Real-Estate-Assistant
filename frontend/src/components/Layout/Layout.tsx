@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, MessageSquare, Bot, FileText,
-  Users, LogOut, Activity
+  Users, LogOut, Activity, Home
 } from 'lucide-react'
 
 const navItems = [
@@ -30,8 +30,10 @@ export default function Layout() {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <div className="logo-mark">
-            <div className="logo-icon">🏡</div>
-            <div className="name">Real-Estate<span>Assistant</span></div>
+            <div className="logo-icon">
+              <Home size={18} strokeWidth={2.5} color="#000" />
+            </div>
+            <div className="logo-text">Real<span>Estate</span></div>
           </div>
         </div>
 

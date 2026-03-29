@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, ArrowRight, RefreshCw, ServerCrash, Clock, Search } from 'lucide-react'
+import { Activity, ArrowRight, RefreshCw, ServerCrash, Clock } from 'lucide-react'
 import { logsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
 
@@ -47,10 +47,10 @@ export default function Logs() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Activity className="text-accent" /> System Logs (Roteamento)
+            <Activity className="text-white" /> System Logs
           </h1>
           <p className="text-muted mt-1 text-sm">
-            Auditoria em tempo real das decisões do Supervisor e redirecionamentos (Self-Evaluation) dos Agentes.
+            Auditoria de roteamento e redirecionamentos inteligentes (Self-Evaluation).
           </p>
         </div>
         <button onClick={fetchLogs} disabled={loading} className="btn btn-outline flex items-center gap-2">
@@ -92,7 +92,7 @@ export default function Logs() {
                   title="Clique para ver Detalhes do Roteamento"
                 >
                   <td className="p-3 font-mono text-xs opacity-70 flex items-center gap-1">
-                    <Search size={12} className="text-accent" /> #{log.id}
+                    #{log.id}
                   </td>
                   <td className="p-3 whitespace-nowrap">
                     <div className="flex items-center gap-1.5 text-muted">
@@ -100,12 +100,12 @@ export default function Logs() {
                       {new Date(log.created_at).toLocaleString('pt-BR')}
                     </div>
                   </td>
-                  <td className="p-3 font-mono text-xs text-accent">
+                  <td className="p-3 font-mono text-xs" style={{ color: '#FFFFFF' }}>
                     {log.session_id.split('-')[0]}...
                   </td>
                   <td className="p-3">
                     {log.metadata?.supervisor_selection ? (
-                      <span className="badge badge-outline">{log.metadata.supervisor_selection}</span>
+                      <span className="badge badge-muted">{log.metadata.supervisor_selection}</span>
                     ) : (
                       <span className="text-muted italic">N/A</span>
                     )}
@@ -114,10 +114,10 @@ export default function Logs() {
                     {log.metadata?.calls && log.metadata.calls.filter(c => !c.success).length > 0 ? (
                       <div className="flex flex-col gap-1">
                         {log.metadata.calls.filter(c => !c.success).map((c, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs bg-black/20 p-1.5 rounded" title={c.redirect_reason}>
-                            <span className="text-red-400">{c.agent_slug}</span>
+                          <div key={i} className="flex items-center gap-1.5 text-xs bg-white/5 p-1.5 rounded" title={c.redirect_reason}>
+                            <span style={{ color: '#A3A3A3' }}>{c.agent_slug}</span>
                             <ArrowRight size={10} className="text-muted" />
-                            <span className="text-green-400">{c.redirected_to}</span>
+                            <span style={{ color: '#FFFFFF' }}>{c.redirected_to}</span>
                           </div>
                         ))}
                       </div>
@@ -125,7 +125,7 @@ export default function Logs() {
                       <span className="text-muted text-sm italic">Direto</span>
                     )}
                   </td>
-                  <td className="p-3 font-medium text-emerald-400">
+                  <td className="p-3 font-medium" style={{ color: '#FFFFFF' }}>
                     {log.agent_slug || log.metadata?.final_agent || 'N/A'}
                   </td>
                 </tr>

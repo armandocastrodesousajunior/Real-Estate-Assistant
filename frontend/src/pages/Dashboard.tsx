@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, Users, MessageSquare, Bot, TrendingUp, Activity } from 'lucide-react'
+import { Building2, Users, MessageSquare, Bot, TrendingUp } from 'lucide-react'
 import { propertiesAPI, leadsAPI, chatAPI, agentsAPI } from '../services/api'
 
 interface Stats {
@@ -45,10 +45,10 @@ export default function Dashboard() {
   }, [])
 
   const statCards = [
-    { label: 'Imóveis', value: stats.properties, icon: '🏠', color: '#3B82F6', bg: 'rgba(59,130,246,0.12)', path: '/properties' },
-    { label: 'Leads', value: stats.leads, icon: '👤', color: '#10B981', bg: 'rgba(16,185,129,0.12)', path: '/leads' },
-    { label: 'Conversas', value: stats.conversations, icon: '💬', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', path: '/chat' },
-    { label: 'Agentes Ativos', value: agents.filter(a => a.is_active).length, icon: '🤖', color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)', path: '/agents' },
+    { label: 'Imóveis', value: stats.properties, icon: <Building2 size={20} />, path: '/properties' },
+    { label: 'Leads', value: stats.leads, icon: <Users size={20} />, path: '/leads' },
+    { label: 'Conversas', value: stats.conversations, icon: <MessageSquare size={20} />, path: '/chat' },
+    { label: 'Agentes Ativos', value: agents.filter(a => a.is_active).length, icon: <Bot size={20} />, path: '/agents' },
   ]
 
   return (
@@ -69,8 +69,8 @@ export default function Dashboard() {
       <div className="stats-grid">
         {statCards.map((s) => (
           <div key={s.label} className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate(s.path)}>
-            <div className="stat-icon" style={{ background: s.bg, color: s.color }}>
-              <span style={{ fontSize: '22px' }}>{s.icon}</span>
+            <div className="stat-icon" style={{ background: 'rgba(255,255,255,0.05)', color: '#FFF' }}>
+              {s.icon}
             </div>
             <div>
               <div className="stat-value">{loading ? '—' : s.value}</div>
@@ -96,7 +96,7 @@ export default function Dashboard() {
               {agents.map((agent) => (
                 <div key={agent.slug} className="agent-card" style={{ opacity: agent.is_active ? 1 : 0.5 }}>
                   <div className="agent-header">
-                    <div className="agent-emoji" style={{ background: `${agent.color}22` }}>
+                    <div className="agent-emoji" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
                       {agent.emoji}
                     </div>
                     <div>
@@ -134,18 +134,18 @@ export default function Dashboard() {
       {/* Quick Actions */}
       <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
         {[
-          { label: 'Cadastrar Imóvel', icon: '🏠', path: '/properties/new', color: '#3B82F6' },
-          { label: 'Ver Chat IA', icon: '💬', path: '/chat', color: '#F59E0B' },
-          { label: 'Editar Prompts', icon: '✍️', path: '/prompts', color: '#EF4444' },
-          { label: 'Gerenciar Leads', icon: '👤', path: '/leads', color: '#10B981' },
+          { label: 'Cadastrar Imóvel', icon: <Building2 size={18} />, path: '/properties/new' },
+          { label: 'Ver Chat IA', icon: <MessageSquare size={18} />, path: '/chat' },
+          { label: 'Editar Prompts', icon: <TrendingUp size={18} />, path: '/prompts' },
+          { label: 'Gerenciar Leads', icon: <Users size={18} />, path: '/leads' },
         ].map((a) => (
           <button
             key={a.path}
             className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start', gap: '10px', padding: '14px 16px' }}
+            style={{ justifyContent: 'flex-start', gap: '12px', padding: '16px 20px' }}
             onClick={() => navigate(a.path)}
           >
-            <span style={{ fontSize: '18px' }}>{a.icon}</span>
+            {a.icon}
             {a.label}
           </button>
         ))}

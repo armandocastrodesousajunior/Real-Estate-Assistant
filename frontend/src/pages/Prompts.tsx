@@ -81,8 +81,8 @@ export default function Prompts() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">🎛️ Editor de Prompts</h1>
-          <p className="page-header-sub">Configure o comportamento e personalidade de cada agente</p>
+          <h1 className="page-header-title">Editor de Prompts</h1>
+          <p className="page-header-sub">Configure o comportamento e personalidade de cada agente especialista</p>
         </div>
       </div>
 
@@ -107,7 +107,6 @@ export default function Prompts() {
             <div className="card-header">
               <div>
                 <span className="card-title">
-                  {agents.find(a => a.slug === selected)?.emoji}{' '}
                   System Prompt — {agents.find(a => a.slug === selected)?.name}
                 </span>
                 <div className="text-xs text-muted mt-1">
@@ -126,8 +125,8 @@ export default function Prompts() {
             </div>
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {hasChanges && (
-                <div style={{ background: 'var(--warning-dim)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: '0.78rem', color: 'var(--warning)' }}>
-                  ⚠️ Alterações não salvas. Clique em "Salvar" para criar uma nova versão.
+                <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: '0.78rem', color: '#A3A3A3' }}>
+                  Atenção: Alterações não salvas. Clique em "Salvar" para criar uma nova versão.
                 </div>
               )}
               <textarea
@@ -183,7 +182,7 @@ export default function Prompts() {
                 </div>
                 <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto' }}>
                   {history.map((h) => (
-                    <div key={h.id} style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: h.is_active ? 'var(--accent-dim)' : 'var(--bg-elevated)' }}>
+                    <div key={h.id} style={{ padding: '10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: h.is_active ? 'rgba(255,255,255,0.05)' : 'transparent' }}>
                       <div className="flex items-center justify-between">
                         <div>
                           <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>Versão {h.version}</span>

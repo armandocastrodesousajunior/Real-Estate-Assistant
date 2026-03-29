@@ -4,10 +4,10 @@ import { Search, Plus, Bed, Bath, Car, MapPin, Edit, Trash2 } from 'lucide-react
 import { propertiesAPI } from '../services/api'
 
 const STATUS_BADGE: Record<string, string> = {
-  disponivel: 'badge-success',
+  disponivel: 'badge-info',
   reservado: 'badge-warning',
   vendido: 'badge-muted',
-  alugado: 'badge-info',
+  alugado: 'badge-success',
   inativo: 'badge-error',
 }
 
@@ -61,8 +61,8 @@ export default function Properties() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">🏠 Imóveis</h1>
-          <p className="page-header-sub">{total} imóveis cadastrados</p>
+          <h1 className="page-header-title">Imóveis</h1>
+          <p className="page-header-sub">{total} propriedades no sistema</p>
         </div>
         <button className="btn btn-primary" onClick={() => navigate('/properties/new')}>
           <Plus size={16} /> Novo Imóvel
@@ -123,7 +123,7 @@ export default function Properties() {
                   {p.featured ? <div className="property-featured-badge">⭐ Destaque</div> : null}
                 </div>
                 <div className="property-card-body">
-                  <div className="property-price">
+                  <div className="property-price" style={{ color: '#FFFFFF' }}>
                     {p.price?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </div>
                   <div className="property-title">{p.title}</div>

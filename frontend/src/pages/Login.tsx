@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { authAPI } from '../services/api'
+import { Home } from 'lucide-react'
 
 interface Props { onLogin: () => void }
 
@@ -28,8 +29,10 @@ export default function Login({ onLogin }: Props) {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
-          <div className="icon">🏡</div>
-          <div className="name">Real-Estate<span>Assistant</span></div>
+          <div className="icon">
+            <Home size={24} strokeWidth={2.5} color="#000" />
+          </div>
+          <div className="logo-text" style={{ fontSize: '1.5rem' }}>Real<span>Estate</span></div>
         </div>
 
         <div className="login-title">Bem-vindo de volta</div>

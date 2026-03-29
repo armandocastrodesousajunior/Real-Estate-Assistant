@@ -48,8 +48,8 @@ export default function Agents() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-header-title">🤖 Agentes de IA</h1>
-          <p className="page-header-sub">Configure modelos e parâmetros de cada agente</p>
+          <h1 className="page-header-title">Agentes de IA</h1>
+          <p className="page-header-sub">Gestão de modelos e parâmetros inteligentes</p>
         </div>
       </div>
 
@@ -58,7 +58,7 @@ export default function Agents() {
           <div key={agent.slug} className="card" style={{ opacity: agent.is_active ? 1 : 0.65 }}>
             <div className="card-header">
               <div className="flex items-center gap-3">
-                <div className="agent-emoji" style={{ background: `${agent.color}22`, width: 40, height: 40 }}>
+                <div className="agent-emoji" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', width: 40, height: 40 }}>
                   {agent.emoji}
                 </div>
                 <div>
@@ -107,7 +107,7 @@ export default function Agents() {
                   <div className="agent-model">{agent.model}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', padding: '12px 0', borderTop: '1px solid var(--border)' }}>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--accent)' }}>{agent.temperature}</div>
+                      <div style={{ fontWeight: 700, color: '#FFFFFF' }}>{agent.temperature}</div>
                       <div className="text-xs text-muted">temperatura</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
@@ -120,7 +120,7 @@ export default function Agents() {
                     </div>
                   </div>
                   <button className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center' }} onClick={() => startEdit(agent)}>
-                    ⚙️ Configurar
+                    Configurar
                   </button>
                 </>
               )}
