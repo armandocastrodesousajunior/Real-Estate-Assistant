@@ -1,0 +1,125 @@
+import axios from 'axios'
+
+// URL relativa — o proxy do Vite encaminha para http://localhost:8000
+const BASE_URL = ''
+
+export const api = axios.create({
+  baseURL: BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// Injeta token JWT automaticamente
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('realtyai_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// Redireciona para login em 401
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('realtyai_token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export const authAPI = {
+  login: (email: string, password: string) =>
+    api.post('/api/v1/auth/login', { email, password }),
+  me: () => api.get('/api/v1/auth/me'),
+}
+
+// ─── Properties ───────────────────────────────────────────────────────────────
+
+export const propertiesAPI = {
+  list: (params?: Record<string, unknown>) =>
+    api.get('/api/v1/properties/', { params }),
+  get: (id: number) => api.get(`/api/v1/properties/${id}`),
+  create: (data: Record<string, unknown>) => api.post('/api/v1/properties/', data),
+  update: (id: number, data: Record<string, unknown>) =>
+    api.put(`/api/v1/properties/${id}`, data),
+  delete: (id: number) => api.delete(`/api/v1/properties/${id}`),
+  uploadPhotos: (id: number, files: File[]) => {
+    const form = new FormData()
+    files.forEach((f) => form.append('files', f))
+    return api.post(`/api/v1/properties/${id}/photos`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  deletePhoto: (propertyId: number, photoIndex: number) =>
+    api.delete(`/api/v1/properties/${propertyId}/photos/${photoIndex}`),
+}
+
+// ─── Agents ───────────────────────────────────────────────────────────────────
+
+export const agentsAPI = {
+  list: () => api.get('/api/v1/agents/'),
+  get: (slug: string) => api.get(`/api/v1/agents/${slug}`),
+  update: (slug: string, data: Record<string, unknown>) =>
+    api.put(`/api/v1/agents/${slug}`, data),
+  toggle: (slug: string, isActive: boolean) =>
+    api.patch(`/api/v1/agents/${slug}/toggle`, { is_active: isActive }),
+  updateModel: (slug: string, model: string) =>
+    api.patch(`/api/v1/agents/${slug}/model`, { model }),
+  getModels: () => api.get('/api/v1/agents/openrouter/models'),
+}
+
+// ─── Prompts ──────────────────────────────────────────────────────────────────
+
+export const promptsAPI = {
+  list: () => api.get('/api/v1/prompts/'),
+  get: (agentSlug: string) => api.get(`/api/v1/prompts/${agentSlug}`),
+  update: (agentSlug: string, data: Record<string, unknown>) =>
+    api.put(`/api/v1/prompts/${agentSlug}`, data),
+  history: (agentSlug: string) =>
+    api.get(`/api/v1/prompts/${agentSlug}/history`),
+  test: (agentSlug: string, data: Record<string, unknown>) =>
+    api.post(`/api/v1/prompts/${agentSlug}/test`, data),
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+export const chatAPI = {
+  /** Cria um EventSource para streaming SSE */
+  streamChat: (message: string, sessionId?: string) => {
+    const token = localStorage.getItem('realtyai_token')
+    return fetch(`${BASE_URL}/api/v1/chat/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ message, session_id: sessionId, stream: true }),
+    })
+  },
+  listConversations: (params?: Record<string, unknown>) =>
+    api.get('/api/v1/chat/conversations', { params }),
+  getConversation: (sessionId: string) =>
+    api.get(`/api/v1/chat/conversations/${sessionId}`),
+  deleteConversation: (sessionId: string) =>
+    api.delete(`/api/v1/chat/conversations/${sessionId}`),
+}
+
+// ─── Logs ─────────────────────────────────────────────────────────────────────
+
+export const logsAPI = {
+  list: (params?: Record<string, unknown>) => api.get('/api/v1/logs/', { params }),
+}
+
+// ─── Leads ────────────────────────────────────────────────────────────────────
+
+export const leadsAPI = {
+  list: (params?: Record<string, unknown>) =>
+    api.get('/api/v1/leads/', { params }),
+  get: (id: number) => api.get(`/api/v1/leads/${id}`),
+  create: (data: Record<string, unknown>) => api.post('/api/v1/leads/', data),
+  update: (id: number, data: Record<string, unknown>) =>
+    api.put(`/api/v1/leads/${id}`, data),
+  delete: (id: number) => api.delete(`/api/v1/leads/${id}`),
+}

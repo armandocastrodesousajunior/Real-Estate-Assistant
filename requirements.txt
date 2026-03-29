@@ -1,0 +1,49 @@
+# ============================================================
+#  RealtyAI — Python Dependencies
+#  Install via Conda:  conda env create -f environment.yml
+#  Install via pip:    pip install -r requirements.txt
+# ============================================================
+
+# --- API Framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12          # File uploads (fotos de imóveis)
+
+# --- Database & ORM ---
+sqlalchemy==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0                 # SQLite async driver
+
+# --- Pydantic & Validação ---
+pydantic==2.10.3
+pydantic-settings==2.6.1
+pydantic[email]==2.10.3
+email-validator==2.2.0
+
+# --- Autenticação & Segurança ---
+python-jose[cryptography]==3.3.0  # JWT
+passlib[bcrypt]==1.7.4            # Password hashing
+bcrypt==4.2.1
+
+# --- HTTP Client (OpenRouter) ---
+httpx==0.28.1                     # Async HTTP client
+openai==1.58.1                    # OpenRouter usa API compatível com OpenAI
+
+# --- Processamento de Imagens ---
+pillow==11.0.0                    # Redimensionamento de fotos
+
+# --- Utilitários ---
+python-dotenv==1.0.1              # Carregamento de variáveis .env
+aiofiles==24.1.0                  # Leitura/escrita async de arquivos
+humanize==4.11.0                  # Formatação de números legíveis
+
+# --- CORS & Middlewares ---
+# (já incluído no FastAPI/Starlette)
+
+# --- Logging & Observabilidade ---
+loguru==0.7.3                     # Logger profissional
+
+# --- Desenvolvimento (apenas em dev) ---
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1                     # Usado nos tests também

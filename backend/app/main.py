@@ -1,0 +1,249 @@
+import os
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from loguru import logger
+
+from app.core.config import settings
+from app.core.database import engine, Base, AsyncSessionLocal
+
+# Importa todos os modelos para que o SQLAlchemy registre as tabelas no metadata
+# IMPORTANTE: deve vir antes de Base.metadata.create_all()
+from app.models.property import Property          # noqa: F401
+from app.models.agent import Agent                # noqa: F401
+from app.models.lead import Lead                  # noqa: F401
+from app.models.conversation import Conversation, Message  # noqa: F401
+from app.models.prompt import Prompt              # noqa: F401
+
+# Routers
+from app.routers import auth, properties, agents, prompts, chat, leads, logs
+
+
+async def seed_database():
+    """Popula o banco com dados iniciais (agentes e prompts padrão)"""
+    from sqlalchemy import select
+    from app.models.agent import Agent
+    from app.models.prompt import Prompt, DEFAULT_PROMPTS
+
+    AGENT_SEED_DATA = [
+        {
+            "slug": "supervisor",
+            "name": "Supervisor",
+            "description": "Analisa a intenção do usuário e roteia para o agente especializado correto.",
+            "emoji": "🧠",
+            "color": "#8B5CF6",
+            "model": "openai/gpt-4o-mini",
+            "temperature": 0.1,
+            "max_tokens": 50,
+        },
+        {
+            "slug": "property_finder",
+            "name": "Buscador de Imóveis",
+            "description": "Especializado em encontrar e apresentar imóveis que atendam às necessidades do cliente.",
+            "emoji": "🏠",
+            "color": "#3B82F6",
+            "model": "openai/gpt-4o-mini",
+            "temperature": 0.5,
+            "max_tokens": 2048,
+        },
+        {
+            "slug": "pricing_analyst",
+            "name": "Avaliador de Preços",
+            "description": "Analisa e avalia preços de imóveis, calcula métricas como preço/m² e rentabilidade.",
+            "emoji": "📊",
+            "color": "#10B981",
+            "model": "openai/gpt-4o",
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        },
+        {
+            "slug": "customer_service",
+            "name": "Atendimento ao Cliente",
+            "description": "Agente de atendimento humano para qualificação de leads, agendamentos e suporte geral.",
+            "emoji": "👤",
+            "color": "#F59E0B",
+            "model": "openai/gpt-4o-mini",
+            "temperature": 0.7,
+            "max_tokens": 1024,
+        },
+        {
+            "slug": "listing_writer",
+            "name": "Redator de Anúncios",
+            "description": "Cria descrições irresistíveis e otimizadas para anúncios de imóveis.",
+            "emoji": "✍️",
+            "color": "#EF4444",
+            "model": "openai/gpt-4o",
+            "temperature": 0.8,
+            "max_tokens": 2048,
+        },
+        {
+            "slug": "market_analyst",
+            "name": "Analista de Mercado",
+            "description": "Fornece análises de tendências do mercado imobiliário, regiões em valorização e dados de investimento.",
+            "emoji": "🔍",
+            "color": "#06B6D4",
+            "model": "openai/gpt-4o",
+            "temperature": 0.3,
+            "max_tokens": 3000,
+        },
+    ]
+
+    async with AsyncSessionLocal() as session:
+        # Verifica se já foi populado
+        result = await session.execute(select(Agent))
+        if result.scalars().first():
+            logger.info("Database already seeded. Skipping.")
+            return
+
+        logger.info("Seeding database with default agents and prompts...")
+
+        for agent_data in AGENT_SEED_DATA:
+            agent = Agent(**agent_data)
+            session.add(agent)
+
+        await session.flush()
+
+        # Cria prompts padrão
+        for slug, prompt_text in DEFAULT_PROMPTS.items():
+            prompt = Prompt(
+                agent_slug=slug,
+                version=1,
+                is_active=True,
+                system_prompt=prompt_text,
+                notes="Prompt padrão do sistema.",
+            )
+            session.add(prompt)
+
+        await session.commit()
+        logger.info("✅ Database seeded successfully.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle da aplicação — startup e shutdown"""
+    # Startup
+    logger.info(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+
+    # Cria diretório de uploads
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    os.makedirs(os.path.join(settings.UPLOAD_DIR, "properties"), exist_ok=True)
+    logger.info(f"📁 Upload directory: {settings.UPLOAD_DIR}")
+
+    # Cria tabelas no banco
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("✅ Database tables created")
+
+    # Popula dados iniciais
+    await seed_database()
+
+    logger.info("✅ RealtyAI API ready!")
+    yield
+
+    # Shutdown
+    await engine.dispose()
+    logger.info("👋 RealtyAI API shut down.")
+
+
+app = FastAPI(
+    title="RealtyAI — Sistema Multi-Agentes para Imobiliária",
+    description="""
+## 🏡 RealtyAI API
+
+Sistema avançado de inteligência artificial para imobiliárias com **6 agentes especializados** orquestrados por IA.
+
+---
+
+### 🤖 Agentes Disponíveis
+
+| Agente | Função | Emoji |
+|---|---|---|
+| Supervisor | Roteamento de intenção | 🧠 |
+| Buscador de Imóveis | Encontrar propriedades | 🏠 |
+| Avaliador de Preços | Análise de precificação | 📊 |
+| Atendimento ao Cliente | Qualificação de leads | 👤 |
+| Redator de Anúncios | Criação de textos | ✍️ |
+| Analista de Mercado | Tendências e mercado | 🔍 |
+
+---
+
+### 🔐 Autenticação
+
+1. Use `POST /api/v1/auth/login` com suas credenciais
+2. Copie o `access_token` retornado
+3. Clique em **Authorize** e insira: `Bearer <seu_token>`
+
+---
+
+### 💬 Chat em Tempo Real
+
+O endpoint `/api/v1/chat/` retorna **Server-Sent Events (SSE)** em streaming.
+Eventos: `agent_selected`, `token`, `done`.
+
+---
+
+### 📚 Recursos
+
+- **Imóveis**: CRUD completo com upload de fotos
+- **Leads**: Gestão do funil de vendas
+- **Prompts**: Configure cada agente individualmente
+- **Configurações**: Gerencie modelos e parâmetros de cada agente
+    """,
+    version=settings.APP_VERSION,
+    contact={
+        "name": "RealtyAI Support",
+        "email": "support@realtyai.com",
+    },
+    license_info={"name": "MIT License"},
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
+
+# ─── Middlewares ──────────────────────────────────────────────────────────────
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
+# ─── Static files (uploads) ───────────────────────────────────────────────────
+
+# Garante que o diretório existe antes de montar (evita RuntimeError)
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+os.makedirs(os.path.join(settings.UPLOAD_DIR, "properties"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
+# ─── Routers ──────────────────────────────────────────────────────────────────
+
+app.include_router(auth.router,       prefix="/api/v1/auth",       tags=["🔐 Autenticação"])
+app.include_router(properties.router, prefix="/api/v1/properties", tags=["🏠 Imóveis"])
+app.include_router(agents.router,     prefix="/api/v1/agents",     tags=["🤖 Agentes"])
+app.include_router(prompts.router,    prefix="/api/v1/prompts",    tags=["🎛️ Prompts"])
+app.include_router(chat.router,       prefix="/api/v1/chat",       tags=["💬 Chat"])
+app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
+app.include_router(logs.router,       prefix="/api/v1/logs",       tags=["📜 Logs"])
+
+# ─── Root endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/", tags=["📊 Status"], include_in_schema=False)
+async def root():
+    return {
+        "service": "RealtyAI API",
+        "version": settings.APP_VERSION,
+        "status": "online",
+        "docs": "/docs",
+        "redoc": "/redoc",
+    }
+
+
+@app.get("/health", tags=["📊 Status"], summary="Health check")
+async def health():
+    """Verificação de saúde da API. Use para monitoramento."""
+    return {"status": "healthy", "version": settings.APP_VERSION}

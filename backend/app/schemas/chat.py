@@ -1,0 +1,87 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+from app.models.conversation import MessageRole
+
+
+class ChatMessage(BaseModel):
+    role: MessageRole
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000, description="Mensagem do usuário")
+    session_id: Optional[str] = Field(None, description="ID da sessão/conversa (omitir para nova conversa)")
+    stream: bool = Field(True, description="Usar streaming SSE")
+
+
+class ChatResponse(BaseModel):
+    session_id: str
+    message: str
+    agent_slug: str
+    agent_name: str
+    agent_emoji: str
+    tokens_used: int
+    model_used: str
+
+
+class MessageResponse(BaseModel):
+    id: int
+    role: MessageRole
+    content: str
+    agent_slug: Optional[str] = None
+    agent_name: Optional[str] = None
+    agent_emoji: Optional[str] = None
+    tokens_used: int = 0
+    model_used: Optional[str] = None
+    metadata_: Optional[dict] = Field(None, alias="metadata")
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+
+class ConversationResponse(BaseModel):
+    id: int
+    session_id: str
+    title: Optional[str] = None
+    last_agent_slug: Optional[str] = None
+    message_count: int
+    total_tokens: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ConversationDetailResponse(ConversationResponse):
+    messages: List[MessageResponse] = []
+
+
+class PromptSchema(BaseModel):
+    id: int
+    agent_slug: str
+    version: int
+    is_active: bool
+    system_prompt: str
+    user_prompt_template: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PromptUpdate(BaseModel):
+    system_prompt: str = Field(..., min_length=10, description="System prompt do agente")
+    user_prompt_template: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PromptTest(BaseModel):
+    system_prompt: str = Field(..., description="Prompt a ser testado")
+    user_message: str = Field(..., min_length=1, description="Mensagem de teste")
+    model: Optional[str] = Field(None, description="Modelo a usar (padrão: do agente)")

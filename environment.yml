@@ -1,0 +1,28 @@
+# ============================================================
+#  RealtyAI — Conda Environment
+#  
+#  Criar ambiente:   conda env create -f environment.yml
+#  Ativar:           conda activate realtyai
+#  Atualizar:        conda env update -f environment.yml --prune
+#  Exportar atual:   conda env export > environment.yml
+#  Remover:          conda env remove -n realtyai
+# ============================================================
+
+name: realtyai
+
+channels:
+  - conda-forge        # Repositório principal (mais atualizado)
+  - defaults
+
+dependencies:
+  # --- Runtime Python ---
+  - python=3.11        # Versão LTS estável e compatível com todas as libs
+
+  # --- Pacotes Conda (binários otimizados) ---
+  - pip                # Gerenciador pip (para instalar requirements.txt)
+  - nodejs=20          # Para o frontend React/Vite
+
+  # --- Via pip (referência ao requirements.txt) ---
+  # O Conda instalará automaticamente todos os pacotes listados no requirements.txt
+  - pip:
+    - -r requirements.txt

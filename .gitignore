@@ -1,0 +1,44 @@
+# --- Backend (Python) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+backend/app/core/__pycache__/
+backend/app/models/__pycache__/
+backend/app/routers/__pycache__/
+backend/app/agents/__pycache__/
+
+# --- Banco de Dados (SQLite) ---
+*.db
+*.sqlite3
+backend/*.db
+backend/test_*.db
+
+# --- Frontend (Node/Vite) ---
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.local/
+
+# --- Configurações Sensíveis ---
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# --- Editores e Sistema ---
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# --- Logs ---
+*.log
+logs/
