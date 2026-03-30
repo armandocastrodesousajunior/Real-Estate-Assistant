@@ -61,10 +61,10 @@ export const propertiesAPI = {
 export const agentsAPI = {
   list: () => api.get('/api/v1/agents/'),
   get: (slug: string) => api.get(`/api/v1/agents/${slug}`),
-  update: (slug: string, data: Record<string, unknown>) =>
-    api.put(`/api/v1/agents/${slug}`, data),
-  toggle: (slug: string, isActive: boolean) =>
-    api.patch(`/api/v1/agents/${slug}/toggle`, { is_active: isActive }),
+  create: (data: any) => api.post('/api/v1/agents/', data),
+  update: (slug: string, data: any) => api.put(`/api/v1/agents/${slug}`, data),
+  delete: (slug: string) => api.delete(`/api/v1/agents/${slug}`),
+  toggle: (slug: string, isActive: boolean) => api.patch(`/api/v1/agents/${slug}/toggle`, { is_active: isActive }),
   updateModel: (slug: string, model: string) =>
     api.patch(`/api/v1/agents/${slug}/model`, { model }),
   getModels: () => api.get('/api/v1/agents/openrouter/models'),

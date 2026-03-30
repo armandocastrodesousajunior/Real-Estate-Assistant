@@ -10,6 +10,7 @@ from app.models.agent import Agent
 from app.models.prompt import Prompt
 from loguru import logger
 import os
+from app.core.config import settings
 
 
 
@@ -75,9 +76,9 @@ async def route_to_agent(
 ) -> Dict:
     """O Supervisor analisa a mensagem e retorna o slug e dados de debug"""
     fallback = {"slug": "customer_service", "debug": {}}
-    supervisor = await get_agent_config(db, "supervisor")
-    if not supervisor:
-        return fallback
+    
+    # Roteamento agora usa configurações internas (SUPERVISOR_MODEL no .env)
+    # Não depende mais de registro na tabela 'agents'
 
     # Histórico resumido para o supervisor (só últimas 3 trocas)
     recent = history[-6:] if len(history) > 6 else history
@@ -131,8 +132,8 @@ Qual agente deve responder?"""
         raw_output = await openrouter.simple_complete(
             system_prompt=full_system,
             user_message=routing_message,
-            model=supervisor.model,
-            temperature=0.1,
+            model=settings.SUPERVISOR_MODEL,
+            temperature=settings.SUPERVISOR_TEMPERATURE,
             max_tokens=300
         )
         

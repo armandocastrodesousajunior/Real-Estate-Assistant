@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { 
   Plus, Send, Trash2, Activity, Search, Home, 
   Settings, MessageSquare, Bot, Save, History, 
-  RotateCcw, Sliders, ChevronRight
+  RotateCcw, Sliders, ChevronRight, X
 } from 'lucide-react'
 import { chatAPI, agentsAPI, promptsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
@@ -35,6 +35,7 @@ interface Agent {
   temperature: number;
   max_tokens: number;
   is_active: boolean;
+  is_system: boolean;
 }
 
 const MODELS_COMMON = [
@@ -69,6 +70,11 @@ export default function Playground() {
   const [promptHistory, setPromptHistory] = useState<any[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  
+  // New Agent Modal
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [newAgentData, setNewAgentData] = useState({ slug: '', name: '', emoji: '🤖', description: '' })
+  const [isCreatingAgent, setIsCreatingAgent] = useState(false)
 
   // --- Refs ---
   const streamingTextRef = useRef('')
@@ -254,6 +260,40 @@ export default function Playground() {
     setEditedPrompt(p.system_prompt)
     setHasUnsavedChanges(true)
   }
+  
+  const handleCreateAgent = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newAgentData.slug || !newAgentData.name) return
+    setIsCreatingAgent(true)
+    try {
+      await agentsAPI.create(newAgentData)
+      await loadInitialData()
+      setIsCreateModalOpen(false)
+      setNewAgentData({ slug: '', name: '', emoji: '🤖', description: '' })
+      alert('Agente criado com sucesso!')
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Erro ao criar agente.')
+    } finally {
+      setIsCreatingAgent(false)
+    }
+  }
+
+  const handleDeleteAgent = async () => {
+    if (!selectedAgentSlug || !currentAgent) return
+    if (currentAgent.is_system) return alert('Agentes de sistema não podem ser excluídos.')
+    
+    if (!confirm(`Tem certeza que deseja excluir o agente "${currentAgent.name}"? Esta ação não pode ser desfeita.`)) return
+    
+    try {
+      await agentsAPI.delete(selectedAgentSlug)
+      setSelectedAgentSlug(null)
+      newChat()
+      await loadInitialData()
+      alert('Agente excluído com sucesso.')
+    } catch (err) {
+      alert('Erro ao excluir agente.')
+    }
+  }
 
   const currentAgent = selectedAgentSlug ? agents.find(a => a.slug === selectedAgentSlug) : null
 
@@ -322,6 +362,15 @@ export default function Playground() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="p-4 border-t border-white/5 mt-auto">
+          <button 
+            className="btn btn-secondary w-full gap-2 border-dashed border-white/10 hover:border-white/30"
+            onClick={() => setIsCreateModalOpen(true)}
+          >
+            <Plus size={14} /> <span>Novo Agente</span>
+          </button>
         </div>
       </div>
 
@@ -574,6 +623,97 @@ export default function Playground() {
             >
               {isSaving ? <div className="spinner" /> : <><Save size={16} /> Salvar Ajustes</>}
             </button>
+
+            {currentAgent && !currentAgent.is_system && (
+              <button 
+                className="btn btn-danger w-full mt-2 bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20" 
+                onClick={handleDeleteAgent}
+              >
+                <Trash2 size={14} /> Excluir Agente
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* New Agent Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#111111] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary/20 p-2 rounded-lg text-primary"><Bot size={20} /></div>
+                <h2 className="text-xl font-bold text-white">Criar Novo Agente</h2>
+              </div>
+              <button onClick={() => setIsCreateModalOpen(false)} className="text-muted hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAgent} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-muted uppercase mb-1 block">Nome do Agente</label>
+                <input 
+                  type="text" 
+                  className="form-input w-full" 
+                  placeholder="Ex: Consultor Jurídico"
+                  value={newAgentData.name}
+                  onChange={e => setNewAgentData({...newAgentData, name: e.target.value})}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-muted uppercase mb-1 block">Slug (ID único)</label>
+                <input 
+                  type="text" 
+                  className="form-input w-full" 
+                  placeholder="ex: consultor_jurudico"
+                  value={newAgentData.slug}
+                  onChange={e => setNewAgentData({...newAgentData, slug: e.target.value.toLowerCase().replace(/\s+/g, '_')})}
+                  required
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <div className="w-20">
+                  <label className="text-xs font-bold text-muted uppercase mb-1 block">Emoji</label>
+                  <input 
+                    type="text" 
+                    className="form-input w-full text-center" 
+                    value={newAgentData.emoji}
+                    onChange={e => setNewAgentData({...newAgentData, emoji: e.target.value})}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-muted uppercase mb-1 block">Descrição Simples</label>
+                  <input 
+                    type="text" 
+                    className="form-input w-full" 
+                    placeholder="O que este agente faz?"
+                    value={newAgentData.description}
+                    onChange={e => setNewAgentData({...newAgentData, description: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button"
+                  className="btn btn-secondary flex-1"
+                  onClick={() => setIsCreateModalOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="btn btn-primary flex-1"
+                  disabled={isCreatingAgent || !newAgentData.slug || !newAgentData.name}
+                >
+                  {isCreatingAgent ? <div className="spinner" /> : 'Criar Agente'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

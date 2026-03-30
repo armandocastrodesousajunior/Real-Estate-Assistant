@@ -29,6 +29,8 @@ class Settings(BaseSettings):
 
     # Agents
     MAX_AGENT_HOPS: int = 2
+    SUPERVISOR_MODEL: str = "openai/gpt-4o-mini"
+    SUPERVISOR_TEMPERATURE: float = 0.1
 
     # Uploads
     UPLOAD_DIR: str = "uploads"

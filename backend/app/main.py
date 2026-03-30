@@ -20,105 +20,6 @@ from app.models.prompt import Prompt              # noqa: F401
 from app.routers import auth, properties, agents, prompts, chat, leads, logs
 
 
-async def seed_database():
-    """Popula o banco com dados iniciais (agentes e prompts padrão)"""
-    from sqlalchemy import select
-    from app.models.agent import Agent
-    from app.models.prompt import Prompt, DEFAULT_PROMPTS
-
-    AGENT_SEED_DATA = [
-        {
-            "slug": "supervisor",
-            "name": "Supervisor",
-            "description": "Analisa a intenção do usuário e roteia para o agente especializado correto.",
-            "emoji": "🧠",
-            "color": "#8B5CF6",
-            "model": "openai/gpt-4o-mini",
-            "temperature": 0.1,
-            "max_tokens": 50,
-        },
-        {
-            "slug": "property_finder",
-            "name": "Buscador de Imóveis",
-            "description": "Especializado em encontrar e apresentar imóveis que atendam às necessidades do cliente.",
-            "emoji": "🏠",
-            "color": "#3B82F6",
-            "model": "openai/gpt-4o-mini",
-            "temperature": 0.5,
-            "max_tokens": 2048,
-        },
-        {
-            "slug": "pricing_analyst",
-            "name": "Avaliador de Preços",
-            "description": "Analisa e avalia preços de imóveis, calcula métricas como preço/m² e rentabilidade.",
-            "emoji": "📊",
-            "color": "#10B981",
-            "model": "openai/gpt-4o",
-            "temperature": 0.2,
-            "max_tokens": 2048,
-        },
-        {
-            "slug": "customer_service",
-            "name": "Atendimento ao Cliente",
-            "description": "Agente de atendimento humano para qualificação de leads, agendamentos e suporte geral.",
-            "emoji": "👤",
-            "color": "#F59E0B",
-            "model": "openai/gpt-4o-mini",
-            "temperature": 0.7,
-            "max_tokens": 1024,
-        },
-        {
-            "slug": "listing_writer",
-            "name": "Redator de Anúncios",
-            "description": "Cria descrições irresistíveis e otimizadas para anúncios de imóveis.",
-            "emoji": "✍️",
-            "color": "#EF4444",
-            "model": "openai/gpt-4o",
-            "temperature": 0.8,
-            "max_tokens": 2048,
-        },
-        {
-            "slug": "market_analyst",
-            "name": "Analista de Mercado",
-            "description": "Fornece análises de tendências do mercado imobiliário, regiões em valorização e dados de investimento.",
-            "emoji": "🔍",
-            "color": "#06B6D4",
-            "model": "openai/gpt-4o",
-            "temperature": 0.3,
-            "max_tokens": 3000,
-        },
-    ]
-
-    async with AsyncSessionLocal() as session:
-        # Verifica se já foi populado
-        result = await session.execute(select(Agent))
-        if result.scalars().first():
-            logger.info("Database already seeded. Skipping.")
-            return
-
-        logger.info("Seeding database with default agents and prompts...")
-
-        for agent_data in AGENT_SEED_DATA:
-            agent = Agent(**agent_data)
-            session.add(agent)
-
-        await session.flush()
-
-        # Cria prompts padrão
-        for slug, prompt_text in DEFAULT_PROMPTS.items():
-            prompt = Prompt(
-                agent_slug=slug,
-                version=1,
-                is_active=True,
-                system_prompt=prompt_text,
-                notes="Prompt padrão do sistema.",
-            )
-            session.add(prompt)
-
-        await session.commit()
-        logger.info("✅ Database seeded successfully.")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle da aplicação — startup e shutdown"""
@@ -134,9 +35,6 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("✅ Database tables created")
-
-    # Popula dados iniciais
-    await seed_database()
 
     logger.info("✅ Real-Estate-Assistant API ready!")
     yield

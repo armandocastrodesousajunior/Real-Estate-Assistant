@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.agent import Agent
 from app.models.prompt import Prompt
-from app.schemas.agent import AgentResponse, AgentUpdate, AgentToggle, AgentModelUpdate
+from app.schemas.agent import AgentResponse, AgentUpdate, AgentToggle, AgentModelUpdate, AgentCreate
 from app.agents.openrouter import openrouter
 from loguru import logger
 
@@ -108,6 +108,63 @@ async def update_agent_model(
     await db.commit()
     await db.refresh(agent)
     return AgentResponse.model_validate(agent)
+
+
+@router.post(
+    "/",
+    response_model=AgentResponse,
+    status_code=201,
+    summary="Criar novo agente",
+    description="Cria um novo agente especialista no sistema.",
+)
+async def create_agent(
+    data: AgentCreate,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    # Verifica se o slug já existe
+    result = await db.execute(select(Agent).where(Agent.slug == data.slug))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail=f"O slug '{data.slug}' já está em uso.")
+
+    agent = Agent(
+        **data.model_dump(),
+        is_system=False,  # Novos agentes criados pela API nunca são de sistema
+        is_active=True
+    )
+    
+    db.add(agent)
+    await db.commit()
+    await db.refresh(agent)
+    return AgentResponse.model_validate(agent)
+
+
+@router.delete(
+    "/{agent_slug}",
+    status_code=204,
+    summary="Remover agente",
+    description="Exclui um agente do sistema. Agentes de sistema (is_system=True) não podem ser removidos.",
+)
+async def delete_agent(
+    agent_slug: str,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+    agent = result.scalar_one_or_none()
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agente não encontrado")
+    
+    if agent.is_system:
+        raise HTTPException(
+            status_code=400, 
+            detail="Agentes de sistema não podem ser removidos."
+        )
+
+    await db.delete(agent)
+    await db.commit()
+    return None
 
 
 @router.get(
