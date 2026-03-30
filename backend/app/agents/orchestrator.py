@@ -203,51 +203,50 @@ async def run_agent_stream(
     internal_logic = get_internal_prompt("expert_logic.md")
     
     # Injeta catálogo dinâmico de agentes para o Handoff
-    if "{{AGENTS_DIRECTORY}}" in internal_logic or "{{RESPONSE_SCHEMA}}" in internal_logic:
-        directory, slugs = await get_agents_directory(db, agent_slug)
-        
-        if "{{AGENTS_DIRECTORY}}" in internal_logic:
-            internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
+    directory, slugs = await get_agents_directory(db, agent_slug)
+    
+    if "{{AGENTS_DIRECTORY}}" in internal_logic:
+        internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
             
-        if "{{RESPONSE_SCHEMA}}" in internal_logic:
-            schema = {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "title": "AgentResponse",
-                "description": "Resposta padronizada de um agente do Real-Estate-Assistant. Pode ser uma resposta direta ao usuário ou um redirecionamento para outro agente especialista.",
-                "type": "object",
-                "required": ["type"],
-                "additionalProperties": False,
-                "discriminator": {
-                    "propertyName": "type"
+    if "{{RESPONSE_SCHEMA}}" in internal_logic:
+        schema = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "AgentResponse",
+            "description": "Resposta padronizada de um agente do Real-Estate-Assistant. Pode ser uma resposta direta ao usuário ou um redirecionamento para outro agente especialista.",
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": False,
+            "discriminator": {
+                "propertyName": "type"
+            },
+            "oneOf": [
+                {
+                    "title": "ResponseOutput",
+                    "description": "O agente responde diretamente ao usuário com conteúdo em Markdown.",
+                    "required": ["type", "response"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "type": { "type": "string", "enum": ["response"] },
+                        "response": {
+                            "type": "object",
+                            "required": ["output"],
+                            "additionalProperties": False,
+                            "properties": {
+                                "output": { "type": "string", "minLength": 1 }
+                            }
+                        },
+                        "redirect": { "not": {} }
+                    }
                 },
-                "oneOf": [
-                    {
-                        "title": "ResponseOutput",
-                        "description": "O agente responde diretamente ao usuário com conteúdo em Markdown.",
-                        "required": ["type", "response"],
-                        "additionalProperties": False,
-                        "properties": {
-                            "type": { "type": "string", "enum": ["response"] },
-                            "response": {
-                                "type": "object",
-                                "required": ["output"],
-                                "additionalProperties": False,
-                                "properties": {
-                                    "output": { "type": "string", "minLength": 1 }
-                                }
-                            },
-                            "redirect": { "not": {} }
-                        }
-                    },
-                    {
-                        "title": "RedirectOutput",
-                        "description": "O agente não possui competência para responder e redireciona para outro especialista.",
-                        "required": ["type", "redirect"],
-                        "additionalProperties": False,
-                        "properties": {
-                            "type": { "type": "string", "enum": ["redirect"] },
-                            "redirect": {
-                                "type": "object",
+                {
+                    "title": "RedirectOutput",
+                    "description": "O agente não possui competência para responder e redireciona para outro especialista.",
+                    "required": ["type", "redirect"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "type": { "type": "string", "enum": ["redirect"] },
+                        "redirect": {
+                            "object": {
                                 "required": ["slug", "reason"],
                                 "additionalProperties": False,
                                 "properties": {
@@ -258,14 +257,15 @@ async def run_agent_stream(
                                     },
                                     "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
                                 }
-                            },
-                            "response": { "not": {} }
-                        }
+                            }
+                        },
+                        "response": { "not": {} }
                     }
-                ]
-            }
-            schema_json = json.dumps(schema, indent=2, ensure_ascii=False)
-            internal_logic = internal_logic.replace("{{RESPONSE_SCHEMA}}", f"```json\n{schema_json}\n```")
+                }
+            ]
+        }
+        schema_json = json.dumps(schema, indent=2, ensure_ascii=False)
+        internal_logic = internal_logic.replace("{{RESPONSE_SCHEMA}}", f"```json\n{schema_json}\n```")
 
     # Montagem Final: Personalidade (DB) + Lógica (Código)
     full_system = f"{system_prompt}\n\n{internal_logic}"
@@ -407,9 +407,18 @@ async def run_agent_complete(
     if not system_prompt:
         return {"content": "Configuração incompleta.", "tokens": 0, "model": ""}
 
-    full_system = system_prompt
+    # Parte B: Lógica Interna (Não Editável via UI - Carregada de Arquivo)
+    internal_logic = get_internal_prompt("expert_logic.md")
+    # Injeta catálogo dinâmico para o Handoff no run_agent_complete também
+    directory, slugs = await get_agents_directory(db, agent_slug)
+    if "{{AGENTS_DIRECTORY}}" in internal_logic:
+        internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
+
+    # Montagem Final: Personalidade (DB) + Lógica (Código)
+    full_system = f"{system_prompt}\n\n{internal_logic}"
+
     if context:
-        full_system += f"\n\n## Contexto:\n{context}"
+        full_system += f"\n\n## Contexto Adicional:\n{context}"
 
     messages = [{"role": "system", "content": full_system}]
     messages.extend(history[-10:])

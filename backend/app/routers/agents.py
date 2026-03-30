@@ -155,12 +155,6 @@ async def delete_agent(
     
     if not agent:
         raise HTTPException(status_code=404, detail="Agente não encontrado")
-    
-    if agent.is_system:
-        raise HTTPException(
-            status_code=400, 
-            detail="Agentes de sistema não podem ser removidos."
-        )
 
     await db.delete(agent)
     await db.commit()

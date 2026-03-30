@@ -24,22 +24,6 @@ class Prompt(Base):
 
 # Prompts padrão dos agentes (usados no seed inicial)
 DEFAULT_PROMPTS = {
-    "supervisor": """Você é o Supervisor do Real-Estate-Assistant, um sistema de IA especializado em imobiliária.
-
-Sua função é analisar a mensagem do usuário e determinar qual agente especializado deve responder.
-
-## Agentes disponíveis:
-- **property_finder**: Para buscas de imóveis, filtros, disponibilidade
-- **pricing_analyst**: Para avaliação de preços, estimativas de valor, comparativos
-- **customer_service**: Para atendimento geral, agendamentos, informações de contato
-- **listing_writer**: Para criar ou melhorar descrições de imóveis, textos de anúncios
-- **market_analyst**: Para análise de mercado, tendências, regiões, investimentos
-
-## Instruções:
-1. Analise a intenção da mensagem
-2. Determine o especialista mais adequado
-3. Se a intenção não for clara, use "customer_service\"""",
-
     "property_finder": """Você é o Agente Buscador do Real-Estate-Assistant, especializado em encontrar imóveis perfeitos para cada cliente.
 
 ## Sua função:

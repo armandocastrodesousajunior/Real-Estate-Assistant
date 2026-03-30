@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { 
   Plus, Send, Trash2, Activity, Search, Home, 
-  Settings, MessageSquare, Bot, Save, History, 
-  RotateCcw, Sliders, ChevronRight, X
+  MessageSquare, Bot, Save, History, 
+  RotateCcw, Sliders, ChevronRight, X, Pencil
 } from 'lucide-react'
 import { chatAPI, agentsAPI, promptsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
@@ -15,6 +15,7 @@ interface Message {
   agentEmoji?: string; 
   agentColor?: string; 
   metadata?: any 
+  appearance?: string;
 }
 
 interface Conversation { 
@@ -278,20 +279,25 @@ export default function Playground() {
     }
   }
 
-  const handleDeleteAgent = async () => {
-    if (!selectedAgentSlug || !currentAgent) return
-    if (currentAgent.is_system) return alert('Agentes de sistema não podem ser excluídos.')
+  const handleDeleteAgent = async (slug?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const targetSlug = slug || selectedAgentSlug;
+    if (!targetSlug) return;
     
-    if (!confirm(`Tem certeza que deseja excluir o agente "${currentAgent.name}"? Esta ação não pode ser desfeita.`)) return
+    const agent = agents.find(a => a.slug === targetSlug);
+    if (!agent) return;
+    
+    if (!confirm(`Tem certeza que deseja excluir o agente "${agent.name}"? Esta ação não pode ser desfeita.`)) return
     
     try {
-      await agentsAPI.delete(selectedAgentSlug)
-      setSelectedAgentSlug(null)
-      newChat()
-      await loadInitialData()
-      alert('Agente excluído com sucesso.')
+      await agentsAPI.delete(targetSlug);
+      if (selectedAgentSlug === targetSlug) {
+        setSelectedAgentSlug(null);
+        newChat();
+      }
+      await loadInitialData();
     } catch (err) {
-      alert('Erro ao excluir agente.')
+      alert('Erro ao excluir agente.');
     }
   }
 
@@ -330,7 +336,7 @@ export default function Playground() {
           </div>
           <div className="agents-list">
             {agents.map(a => (
-              <button 
+              <div 
                 key={a.slug}
                 className={`selection-item ${selectedAgentSlug === a.slug ? 'active' : ''} ${!a.is_active ? 'inactive' : ''}`}
                 onClick={() => { setSelectedAgentSlug(a.slug); newChat(); }}
@@ -340,7 +346,18 @@ export default function Playground() {
                   <div className="name">{a.name} {!a.is_active && <span className="opacity-30 text-[10px] ml-1">(OFF)</span>}</div>
                   <div className="desc">{a.slug}</div>
                 </div>
-              </button>
+                <button 
+                  className="agent-config-btn" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedAgentSlug(a.slug);
+                    setShowConfig(true);
+                  }}
+                  title="Ajustes do Agente"
+                >
+                  <Pencil size={12} />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -406,14 +423,6 @@ export default function Playground() {
             >
               <Activity size={14} />
             </button>
-            {selectedAgentSlug && (
-              <button 
-                className={`btn btn-sm ${showConfig ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setShowConfig(!showConfig)}
-              >
-                <Settings size={14} /> <span>Ajustes</span>
-              </button>
-            )}
           </div>
         </header>
 
@@ -513,7 +522,7 @@ export default function Playground() {
         <div className="playground-config-panel">
           <div className="config-header">
             <div className="flex items-center gap-2">
-              <Settings size={16} />
+              <Pencil size={16} />
               <span>Configurações do Agente</span>
             </div>
             <button className="btn-icon-sm" onClick={() => setShowConfig(false)}><ChevronRight size={18} /></button>
@@ -624,10 +633,10 @@ export default function Playground() {
               {isSaving ? <div className="spinner" /> : <><Save size={16} /> Salvar Ajustes</>}
             </button>
 
-            {currentAgent && !currentAgent.is_system && (
+            {currentAgent && (
               <button 
                 className="btn btn-danger w-full mt-2 bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20" 
-                onClick={handleDeleteAgent}
+                onClick={(e) => handleDeleteAgent(undefined, e)}
               >
                 <Trash2 size={14} /> Excluir Agente
               </button>
