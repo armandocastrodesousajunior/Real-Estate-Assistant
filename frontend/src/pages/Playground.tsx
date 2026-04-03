@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { 
   Plus, Send, Trash2, Activity, Search, Home, 
-  MessageSquare, Bot, Save, History, 
-  RotateCcw, Sliders, ChevronRight, X, Pencil
+  MessageSquare, Bot, Save, History as HistoryIcon, 
+  RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Link, Link2Off, Search as SearchIcon, Check
 } from 'lucide-react'
-import { chatAPI, agentsAPI, promptsAPI } from '../services/api'
+import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
 
 interface Message { 
@@ -76,6 +76,12 @@ export default function Playground() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [newAgentData, setNewAgentData] = useState({ slug: '', name: '', emoji: '🤖', description: '' })
   const [isCreatingAgent, setIsCreatingAgent] = useState(false)
+  
+  const [allTools, setAllTools] = useState<any[]>([])
+  const [agentToolsSlugs, setAgentToolsSlugs] = useState<string[]>([])
+  const [isUpdatingTools, setIsUpdatingTools] = useState(false)
+  const [toolSearchTerm, setToolSearchTerm] = useState('')
+  const [isToolDropdownOpen, setIsToolDropdownOpen] = useState(false)
 
   // --- Refs ---
   const streamingTextRef = useRef('')
@@ -256,6 +262,37 @@ export default function Playground() {
     })
     setPromptHistory(historyRes.data)
     setHasUnsavedChanges(false)
+    
+    // Load Tools for this agent
+    try {
+      const [allToolsRes, agentToolsRes] = await Promise.all([
+        toolsAPI.list(),
+        toolsAPI.listAgentTools(slug)
+      ])
+      setAllTools(allToolsRes.data)
+      setAgentToolsSlugs(agentToolsRes.data)
+    } catch (err) {
+      console.error('Erro ao carregar ferramentas do agente:', err)
+    }
+  }
+
+  const toggleToolLink = async (toolSlug: string) => {
+    if (!selectedAgentSlug) return
+    setIsUpdatingTools(true)
+    const isLinked = agentToolsSlugs.includes(toolSlug)
+    try {
+      if (isLinked) {
+        await toolsAPI.unlink(selectedAgentSlug, toolSlug)
+        setAgentToolsSlugs(prev => prev.filter(s => s !== toolSlug))
+      } else {
+        await toolsAPI.link(selectedAgentSlug, toolSlug)
+        setAgentToolsSlugs(prev => [...prev, toolSlug])
+      }
+    } catch (err) {
+      alert('Erro ao alterar vínculo da ferramenta.')
+    } finally {
+      setIsUpdatingTools(false)
+    }
   }
 
   const saveConfig = async () => {
@@ -597,10 +634,96 @@ export default function Playground() {
               />
             </div>
 
+            {/* Tools Section - Professional Searchable Select */}
+            <div className="config-section">
+              <label className="config-label flex items-center gap-2">
+                <Wrench size={13} /> Ferramentas do Agente
+              </label>
+              
+              <div className="mt-3 space-y-3">
+                {/* Linked Tools Chips */}
+                <div className="flex flex-wrap gap-2">
+                  {agentToolsSlugs.map(slug => {
+                    const tool = allTools.find(t => t.slug === slug)
+                    if (!tool) return null
+                    return (
+                      <div key={slug} className="flex items-center gap-1.5 bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold px-2 py-1 rounded-md">
+                        <span>{tool.name}</span>
+                        <button 
+                          onClick={() => toggleToolLink(slug)}
+                          className="hover:text-white transition-colors"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                  {agentToolsSlugs.length === 0 && (
+                    <div className="text-[10px] text-muted italic">Nenhuma ferramenta vinculada.</div>
+                  )}
+                </div>
+
+                {/* Searchable Select */}
+                <div className="relative">
+                  <div 
+                    className={`flex items-center justify-between bg-white/5 border ${isToolDropdownOpen ? 'border-primary' : 'border-white/10'} rounded-lg p-2.5 cursor-pointer hover:bg-white/10 transition-all`}
+                    onClick={() => setIsToolDropdownOpen(!isToolDropdownOpen)}
+                  >
+                    <span className="text-xs text-muted">Vincular nova ferramenta...</span>
+                    <Plus size={14} className="text-muted" />
+                  </div>
+
+                  {isToolDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl z-[60] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="p-3 border-bottom border-white/5 bg-white/5 flex items-center gap-2">
+                        <SearchIcon size={14} className="text-muted" />
+                        <input 
+                          type="text" 
+                          autoFocus
+                          placeholder="Pesquisar ferramenta..." 
+                          className="bg-transparent border-none text-xs text-white focus:outline-none w-full"
+                          value={toolSearchTerm}
+                          onChange={(e) => setToolSearchTerm(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="max-h-[200px] overflow-y-auto p-1 custom-scrollbar">
+                        {allTools
+                          .filter(t => !agentToolsSlugs.includes(t.slug))
+                          .filter(t => 
+                            t.name.toLowerCase().includes(toolSearchTerm.toLowerCase()) || 
+                            t.slug.toLowerCase().includes(toolSearchTerm.toLowerCase())
+                          ).map(tool => (
+                            <div 
+                              key={tool.slug}
+                              className="flex items-center justify-between p-2.5 rounded-lg hover:bg-white/5 cursor-pointer group transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleToolLink(tool.slug)
+                                setToolSearchTerm('')
+                              }}
+                            >
+                              <div className="flex flex-col">
+                                <span className="text-[11px] font-bold text-white group-hover:text-primary transition-colors">{tool.name}</span>
+                                <span className="text-[9px] text-muted font-mono">{tool.slug}</span>
+                              </div>
+                              <Plus size={12} className="text-muted group-hover:text-primary" />
+                            </div>
+                          ))}
+                        {allTools.filter(t => !agentToolsSlugs.includes(t.slug)).length === 0 && (
+                          <div className="p-4 text-center text-[10px] text-muted italic">Todas as ferramentas já vinculadas.</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* History */}
             <div className="config-section">
               <label className="config-label flex items-center gap-1">
-                <History size={13} /> Histórico de Prompts
+                <HistoryIcon size={13} /> Histórico de Prompts
               </label>
               <div className="history-compact-list">
                 {promptHistory.map((h) => (

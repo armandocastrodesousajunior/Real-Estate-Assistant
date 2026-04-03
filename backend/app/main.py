@@ -17,7 +17,7 @@ from app.models.conversation import Conversation, Message  # noqa: F401
 from app.models.prompt import Prompt              # noqa: F401
 
 # Routers
-from app.routers import auth, properties, agents, prompts, chat, leads, logs
+from app.routers import auth, properties, agents, prompts, chat, leads, logs, tools
 
 
 @asynccontextmanager
@@ -128,6 +128,7 @@ app.include_router(chat.router,       prefix="/api/v1/chat",       tags=["💬 C
 app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
 app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
 app.include_router(logs.router,       prefix="/api/v1/logs",       tags=["📜 Logs"])
+app.include_router(tools.router,      prefix="/api/v1/tools",      tags=["🛠️ Ferramentas"])
 
 # ─── Root endpoints ───────────────────────────────────────────────────────────
 

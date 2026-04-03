@@ -11,6 +11,8 @@ from app.models.prompt import Prompt
 from loguru import logger
 import os
 from app.core.config import settings
+from app.models.tool import Tool, agent_tools
+from app.core.tools_registry import get_tool_by_slug, format_tools_for_prompt
 
 
 
@@ -208,6 +210,30 @@ async def run_agent_stream(
     if "{{AGENTS_DIRECTORY}}" in internal_logic:
         internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
             
+    # Injeta Ferramentas vinculadas a este agente
+    tool_links_res = await db.execute(select(agent_tools.c.tool_slug).where(agent_tools.c.agent_slug == agent_slug))
+    tool_slugs = [row[0] for row in tool_links_res.all()]
+    
+    agent_tools_data = []
+    for ts in tool_slugs:
+        # Tenta no registro interno
+        it = get_tool_by_slug(ts)
+        if it:
+            agent_tools_data.append(it)
+        else:
+            # Tenta no banco (ferramentas externas)
+            et_res = await db.execute(select(Tool).where(Tool.slug == ts, Tool.is_active == True))
+            et = et_res.scalar_one_or_none()
+            if et:
+                agent_tools_data.append({"slug": et.slug, "description": et.description, "prompt": et.prompt})
+                
+    tools_prompt = format_tools_for_prompt(agent_tools_data)
+    if "{{TOOLS_SECTION}}" in internal_logic:
+        internal_logic = internal_logic.replace("{{TOOLS_SECTION}}", tools_prompt)
+    elif tools_prompt:
+        # Fallback se o placeholder sumir
+        internal_logic += f"\n\n{tools_prompt}"
+
     if "{{RESPONSE_SCHEMA}}" in internal_logic:
         schema = {
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -413,6 +439,26 @@ async def run_agent_complete(
     directory, slugs = await get_agents_directory(db, agent_slug)
     if "{{AGENTS_DIRECTORY}}" in internal_logic:
         internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
+
+    # Injeta Ferramentas vinculadas no modo sem stream
+    tool_links_res = await db.execute(select(agent_tools.c.tool_slug).where(agent_tools.c.agent_slug == agent_slug))
+    tool_slugs = [row[0] for row in tool_links_res.all()]
+    agent_tools_data = []
+    for ts in tool_slugs:
+        it = get_tool_by_slug(ts)
+        if it:
+            agent_tools_data.append(it)
+        else:
+            et_res = await db.execute(select(Tool).where(Tool.slug == ts, Tool.is_active == True))
+            et = et_res.scalar_one_or_none()
+            if et:
+                agent_tools_data.append({"slug": et.slug, "description": et.description, "prompt": et.prompt})
+    
+    tools_prompt = format_tools_for_prompt(agent_tools_data)
+    if "{{TOOLS_SECTION}}" in internal_logic:
+        internal_logic = internal_logic.replace("{{TOOLS_SECTION}}", tools_prompt)
+    elif tools_prompt:
+        internal_logic += f"\n\n{tools_prompt}"
 
     # Montagem Final: Personalidade (DB) + Lógica (Código)
     full_system = f"{system_prompt}\n\n{internal_logic}"

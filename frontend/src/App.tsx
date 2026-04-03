@@ -8,6 +8,7 @@ import PropertyForm from './pages/PropertyForm'
 import Playground from './pages/Playground'
 import Leads from './pages/Leads'
 import Logs from './pages/Logs'
+import ToolsPage from './pages/ToolsPage'
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('rea_token'))
@@ -31,7 +32,9 @@ function App() {
           <Route path="properties" element={<Properties />} />
           <Route path="properties/new" element={<PropertyForm />} />
           <Route path="properties/:id/edit" element={<PropertyForm />} />
-          <Route path="playground" element={<Playground />} />
+          <Route path="playground" element={<Navigate to="/playground/agents" replace />} />
+          <Route path="playground/agents" element={<Playground />} />
+          <Route path="playground/tools" element={<ToolsPage />} />
           <Route path="leads" element={<Leads />} />
           <Route path="logs" element={<Logs />} />
         </Route>

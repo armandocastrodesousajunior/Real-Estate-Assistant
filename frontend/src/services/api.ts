@@ -123,3 +123,17 @@ export const leadsAPI = {
     api.put(`/api/v1/leads/${id}`, data),
   delete: (id: number) => api.delete(`/api/v1/leads/${id}`),
 }
+
+// ─── Tools ────────────────────────────────────────────────────────────────────
+
+export const toolsAPI = {
+  list: () => api.get('/api/v1/tools/'),
+  create: (data: any) => api.post('/api/v1/tools/', data),
+  delete: (slug: string) => api.delete(`/api/v1/tools/${slug}`),
+  listAgentTools: (agentSlug: string) => api.get(`/api/v1/tools/agent/${agentSlug}`),
+  link: (agentSlug: string, toolSlug: string) => 
+    api.post('/api/v1/tools/link', { agent_slug: agentSlug, tool_slug: toolSlug, action: 'link' }),
+  unlink: (agentSlug: string, toolSlug: string) => 
+    api.post('/api/v1/tools/link', { agent_slug: agentSlug, tool_slug: toolSlug, action: 'unlink' }),
+}
+

@@ -9,6 +9,13 @@ O sistema processa sua resposta de forma automatizada, portanto, qualquer caract
 
 ---
 
+## Ferramentas Disponíveis
+
+Você tem acesso às seguintes ferramentas de automação. Para utilizá-las, adicione o campo 'call_tool' no seu JSON de resposta.
+
+{{TOOLS_SECTION}}
+
+---
 
 ## Redirecionamento automático (auto-avaliação obrigatória)
 
