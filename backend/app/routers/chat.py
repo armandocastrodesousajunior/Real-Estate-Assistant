@@ -38,10 +38,12 @@ async def build_history(db: AsyncSession, conversation_id: int) -> List[dict]:
     result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at)
+        .order_by(Message.created_at.desc())
         .limit(20)  # Últimas 20 mensagens
     )
     messages = result.scalars().all()
+    # Reordena para ordem cronológica (ASC) antes de enviar para o LLM
+    messages = list(reversed(messages))
     return [{"role": m.role.value, "content": m.content} for m in messages]
 
 
@@ -244,8 +246,17 @@ async def get_conversation(session_id: str, db: AsyncSession = Depends(get_db)):
     )
     messages = msg_result.scalars().all()
 
-    conv_data = ConversationDetailResponse.model_validate(conv)
-    conv_data.messages = [MessageResponse.model_validate(m) for m in messages]
+    conv_data = ConversationDetailResponse(
+        id=conv.id,
+        session_id=conv.session_id,
+        title=conv.title,
+        last_agent_slug=conv.last_agent_slug,
+        message_count=conv.message_count,
+        total_tokens=conv.total_tokens,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+        messages=[MessageResponse.model_validate(m) for m in messages],
+    )
     return conv_data
 
 

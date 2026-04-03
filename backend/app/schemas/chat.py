@@ -35,12 +35,11 @@ class MessageResponse(BaseModel):
     agent_emoji: Optional[str] = None
     tokens_used: int = 0
     model_used: Optional[str] = None
-    metadata_: Optional[dict] = Field(None, alias="metadata")
+    metadata_: Optional[dict] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
-        populate_by_name = True
 
 
 class ConversationResponse(BaseModel):

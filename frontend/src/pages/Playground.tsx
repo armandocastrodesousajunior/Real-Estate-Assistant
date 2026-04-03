@@ -107,15 +107,33 @@ export default function Playground() {
   // --- Chat Logic ---
   const loadConversation = async (sessionId: string) => {
     setActiveSession(sessionId)
-    const { data } = await chatAPI.getConversation(sessionId)
-    setMessages(data.messages.map((m: any) => ({
-      role: m.role,
-      content: m.content,
-      agentSlug: m.agent_slug,
-      agentName: m.agent_name,
-      agentEmoji: m.agent_emoji,
-      metadata: m.metadata || m.metadata_,
-    })))
+    setIsStreaming(false)
+    setStreamingText('')
+    setStreamingAgent(null)
+    streamingTextRef.current = ''
+    streamingAgentRef.current = null
+    streamingTraceRef.current = null
+    setMessages([])
+
+    try {
+      const { data } = await chatAPI.getConversation(sessionId)
+      if (!data || !data.messages) {
+        console.error('Resposta inválida ao carregar conversa:', data)
+        return
+      }
+      setMessages(data.messages.map((m: any) => ({
+        role: m.role,
+        content: m.content,
+        agentSlug: m.agent_slug,
+        agentName: m.agent_name,
+        agentEmoji: m.agent_emoji,
+        agentColor: m.agent_color,
+        metadata: m.metadata || m.metadata_,
+      })))
+    } catch (err) {
+      console.error('Erro ao carregar conversa:', err)
+      setActiveSession(null)
+    }
   }
 
   const newChat = () => {
@@ -320,7 +338,7 @@ export default function Playground() {
           </div>
           <button 
             className={`selection-item ${selectedAgentSlug === null ? 'active' : ''}`}
-            onClick={() => { setSelectedAgentSlug(null); newChat(); }}
+            onClick={() => setSelectedAgentSlug(null)}
           >
             <div className="selection-icon geral"><Sliders size={16} /></div>
             <div className="selection-info">
@@ -339,7 +357,7 @@ export default function Playground() {
               <div 
                 key={a.slug}
                 className={`selection-item ${selectedAgentSlug === a.slug ? 'active' : ''} ${!a.is_active ? 'inactive' : ''}`}
-                onClick={() => { setSelectedAgentSlug(a.slug); newChat(); }}
+                onClick={() => setSelectedAgentSlug(a.slug)}
               >
                 <div className="selection-icon">{a.emoji}</div>
                 <div className="selection-info">
