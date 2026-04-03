@@ -184,25 +184,27 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         conv.message_count += 1
         conv.last_agent_slug = agent_slug
 
-        # Atualiza título da conversa se for a primeira mensagem
-        if conv.message_count <= 2:
-            if conv.is_test:
-                from app.agents.openrouter import openrouter
-                try:
-                    title_prompt = f"Gere um título direto e curto (até 5 palavras) resumindo esta solicitação: '{request.message}'. Retorne APENAS o título."
-                    bot_title = await openrouter.simple_complete(
-                        system_prompt="Você é um assistente que gera títulos extraídos do contexto. Seja minimalista.",
-                        user_message=title_prompt,
-                        model=settings.SUPERVISOR_MODEL,
-                        temperature=0.3,
-                        max_tokens=20
-                    )
-                    conv.title = bot_title.strip().strip('"').strip("'")
-                except Exception:
+        if conv.is_test:
+            from app.agents.openrouter import openrouter
+            recent_context = "\\n".join([f"{h['role'].upper()}: {h['content'][:100]}" for h in history[-3:]])
+            title_prompt = f"Histórico recente:\\n{recent_context}\\n\\nNova mensagem: '{request.message}'\\n\\nGere um título direto e curto (até 5 palavras) resumindo o ASSUNTO ATUAL desta conversa. Retorne APENAS o novo título (sem aspas, sem pontuação). Atualize-o baseado no progresso."
+            
+            try:
+                bot_title = await openrouter.simple_complete(
+                    system_prompt="Você é um assistente cirúrgico focado em dar títulos curtíssimos e minimalistas para conversas.",
+                    user_message=title_prompt,
+                    model=settings.SUPERVISOR_MODEL,
+                    temperature=0.3,
+                    max_tokens=20
+                )
+                conv.title = bot_title.strip().strip('"').strip("'")
+            except Exception:
+                if conv.message_count <= 2:
                     conv.title = request.message[:60] + ("..." if len(request.message) > 60 else "")
-            else:
-                # Real users: no generated title as requested
-                pass
+        else:
+            # Real users: keep original slice logic for first message only
+            if conv.message_count <= 2:
+                conv.title = request.message[:60] + ("..." if len(request.message) > 60 else "")
 
         await db.commit()
 
