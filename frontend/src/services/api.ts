@@ -87,7 +87,7 @@ export const promptsAPI = {
 
 export const chatAPI = {
   /** Cria um EventSource para streaming SSE */
-  streamChat: (message: string, sessionId?: string, agentSlug?: string) => {
+  streamChat: (message: string, sessionId?: string, agentSlug?: string, isTest: boolean = false) => {
     const token = localStorage.getItem('rea_token')
     return fetch(`${BASE_URL}/api/v1/chat/`, {
       method: 'POST',
@@ -95,7 +95,7 @@ export const chatAPI = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message, session_id: sessionId, agent_slug: agentSlug, stream: true }),
+      body: JSON.stringify({ message, session_id: sessionId, agent_slug: agentSlug, is_test: isTest, stream: true }),
     })
   },
   listConversations: (params?: Record<string, unknown>) =>

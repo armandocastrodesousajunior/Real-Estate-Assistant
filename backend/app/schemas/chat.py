@@ -13,6 +13,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000, description="Mensagem do usuário")
     session_id: Optional[str] = Field(None, description="ID da sessão/conversa (omitir para nova conversa)")
     agent_slug: Optional[str] = Field(None, description="ID do agente para chat direto (omitir para Supervisor)")
+    is_test: bool = Field(False, description="Marca se esta conversa foi criada no Playground como teste")
     stream: bool = Field(True, description="Usar streaming SSE")
 
 
@@ -49,6 +50,7 @@ class ConversationResponse(BaseModel):
     last_agent_slug: Optional[str] = None
     message_count: int
     total_tokens: int
+    is_test: bool = False
     created_at: datetime
     updated_at: datetime
 

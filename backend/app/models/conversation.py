@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Enum as SAEnum, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Enum as SAEnum, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -17,6 +17,7 @@ class Conversation(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=True)
     session_id = Column(String(100), unique=True, index=True)
+    is_test = Column(Boolean, default=False, nullable=False, server_default="0")
 
     # Qual agente respondeu por último
     last_agent_slug = Column(String(50), nullable=True)

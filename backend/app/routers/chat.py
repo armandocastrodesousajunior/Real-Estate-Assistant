@@ -17,7 +17,7 @@ from app.agents.orchestrator import route_to_agent, run_agent_stream, get_agent_
 router = APIRouter()
 
 
-async def get_or_create_conversation(db: AsyncSession, session_id: Optional[str]) -> Conversation:
+async def get_or_create_conversation(db: AsyncSession, session_id: Optional[str], is_test: bool = False) -> Conversation:
     if session_id:
         result = await db.execute(
             select(Conversation).where(Conversation.session_id == session_id)
@@ -28,7 +28,7 @@ async def get_or_create_conversation(db: AsyncSession, session_id: Optional[str]
 
     # Nova conversa
     new_session_id = session_id or str(uuid.uuid4())
-    conv = Conversation(session_id=new_session_id)
+    conv = Conversation(session_id=new_session_id, is_test=is_test)
     db.add(conv)
     await db.flush()
     return conv
@@ -68,7 +68,7 @@ data: {"type": "done", "session_id": "uuid", "tokens": 42}
 """,
 )
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
-    conv = await get_or_create_conversation(db, request.session_id)
+    conv = await get_or_create_conversation(db, request.session_id, request.is_test)
     history = await build_history(db, conv.id)
 
     # Salva mensagem do usuário
@@ -186,8 +186,23 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
         # Atualiza título da conversa se for a primeira mensagem
         if conv.message_count <= 2:
-            title = request.message[:60] + ("..." if len(request.message) > 60 else "")
-            conv.title = title
+            if conv.is_test:
+                from app.agents.openrouter import openrouter
+                try:
+                    title_prompt = f"Gere um título direto e curto (até 5 palavras) resumindo esta solicitação: '{request.message}'. Retorne APENAS o título."
+                    bot_title = await openrouter.simple_complete(
+                        system_prompt="Você é um assistente que gera títulos extraídos do contexto. Seja minimalista.",
+                        user_message=title_prompt,
+                        model=settings.SUPERVISOR_MODEL,
+                        temperature=0.3,
+                        max_tokens=20
+                    )
+                    conv.title = bot_title.strip().strip('"').strip("'")
+                except Exception:
+                    conv.title = request.message[:60] + ("..." if len(request.message) > 60 else "")
+            else:
+                # Real users: no generated title as requested
+                pass
 
         await db.commit()
 
@@ -210,18 +225,21 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     description="Retorna histórico de todas as conversas, ordenadas pela mais recente.",
 )
 async def list_conversations(
+    is_test: Optional[bool] = Query(None, description="Filtrar por is_test"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     _: dict = Depends(get_current_user),
 ):
     offset = (page - 1) * page_size
-    result = await db.execute(
-        select(Conversation)
-        .order_by(Conversation.updated_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
+    query = select(Conversation)
+    
+    if is_test is not None:
+        query = query.where(Conversation.is_test == is_test)
+        
+    query = query.order_by(Conversation.updated_at.desc()).offset(offset).limit(page_size)
+    
+    result = await db.execute(query)
     return [ConversationResponse.model_validate(c) for c in result.scalars().all()]
 
 

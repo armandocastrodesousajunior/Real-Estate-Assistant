@@ -96,7 +96,7 @@ export default function Playground() {
   const loadInitialData = async () => {
     const [agentsRes, convsRes] = await Promise.all([
       agentsAPI.list(),
-      chatAPI.listConversations()
+      chatAPI.listConversations({ is_test: true })
     ])
     // Mostramos todos os agentes especialistas (ativos e inativos) para permitir a ativação no Playground
     const allAgents = agentsRes.data.filter((a: Agent) => a.slug !== 'supervisor')
@@ -150,7 +150,7 @@ export default function Playground() {
   }
 
   const loadConversationsList = async () => {
-    const { data } = await chatAPI.listConversations()
+    const { data } = await chatAPI.listConversations({ is_test: true })
     setConversations(data)
   }
 
@@ -171,7 +171,8 @@ export default function Playground() {
       const response = await chatAPI.streamChat(
         text, 
         activeSession || undefined, 
-        selectedAgentSlug || undefined
+        selectedAgentSlug || undefined,
+        true
       )
       const reader = response.body!.getReader()
       const decoder = new TextDecoder()
