@@ -1,43 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { 
-  Plus, Send, Trash2, Activity, Search, Home, 
-  MessageSquare, Bot, Save, History as HistoryIcon, 
-  RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Search as SearchIcon
+import {
+  Plus, Send, Trash2, Activity, Home, MessageSquare, Bot,
+  Save, RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Search as SearchIcon, History as HistoryIcon
 } from 'lucide-react'
 import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
 
-interface Message { 
-  role: string; 
-  content: string; 
-  agentSlug?: string; 
-  agentName?: string; 
-  agentEmoji?: string; 
-  agentColor?: string; 
-  metadata?: any 
-  appearance?: string;
-}
-
-interface Conversation { 
-  id: number; 
-  session_id: string; 
-  title?: string; 
-  message_count: number; 
-  updated_at: string 
-}
-
-interface Agent { 
-  slug: string; 
-  name: string; 
-  emoji: string; 
-  color: string; 
-  description: string;
-  model: string;
-  temperature: number;
-  max_tokens: number;
-  is_active: boolean;
-  is_system: boolean;
-}
+interface Message { role: string; content: string; agentSlug?: string; agentName?: string; agentEmoji?: string; metadata?: any }
+interface Conversation { id: number; session_id: string; title?: string; message_count: number; updated_at: string }
+interface Agent { slug: string; name: string; emoji: string; color: string; description: string; model: string; temperature: number; max_tokens: number; is_active: boolean; is_system: boolean }
 
 const MODELS_COMMON = [
   'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo',
@@ -47,115 +18,63 @@ const MODELS_COMMON = [
 ]
 
 export default function Playground() {
-  // --- States ---
   const [agents, setAgents] = useState<Agent[]>([])
-  const [selectedAgentSlug, setSelectedAgentSlug] = useState<string | null>(null) // null = Geral
+  const [selectedAgentSlug, setSelectedAgentSlug] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeSession, setActiveSession] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  
-  // Streaming
   const [isStreaming, setIsStreaming] = useState(false)
-  const [streamingAgent, setStreamingAgent] = useState<{ name: string; emoji: string; color: string } | null>(null)
+  const [streamingAgent, setStreamingAgent] = useState<{ name: string; emoji: string } | null>(null)
   const [streamingText, setStreamingText] = useState('')
-  
-  // UI Panels
   const [showConfig, setShowConfig] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [selectedTrace, setSelectedTrace] = useState<any>(null)
-  
-  // Agent Config Form
   const [editedPrompt, setEditedPrompt] = useState('')
   const [editedParams, setEditedParams] = useState({ model: '', temperature: 0.7, max_tokens: 2048 })
   const [promptHistory, setPromptHistory] = useState<any[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  
-  // New Agent Modal
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [newAgentData, setNewAgentData] = useState({ slug: '', name: '', emoji: '🤖', description: '', system_prompt: '' })
   const [isCreatingAgent, setIsCreatingAgent] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-  
   const [allTools, setAllTools] = useState<any[]>([])
   const [agentToolsSlugs, setAgentToolsSlugs] = useState<string[]>([])
   const [toolSearchTerm, setToolSearchTerm] = useState('')
   const [isToolDropdownOpen, setIsToolDropdownOpen] = useState(false)
 
-  // --- Refs ---
   const streamingTextRef = useRef('')
-  const streamingAgentRef = useRef<{ name: string; emoji: string; color: string } | null>(null)
+  const streamingAgentRef = useRef<{ name: string; emoji: string } | null>(null)
   const streamingTraceRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // --- Initial Load ---
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingText])
+  useEffect(() => { loadInitialData() }, [])
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, streamingText])
 
   const loadInitialData = async () => {
-    const [agentsRes, convsRes] = await Promise.all([
-      agentsAPI.list(),
-      chatAPI.listConversations({ is_test: true })
-    ])
-    // Mostramos todos os agentes especialistas (ativos e inativos) para permitir a ativação no Playground
-    const allAgents = agentsRes.data.filter((a: Agent) => a.slug !== 'supervisor')
-    setAgents(allAgents)
+    const [agentsRes, convsRes] = await Promise.all([agentsAPI.list(), chatAPI.listConversations({ is_test: true })])
+    setAgents(agentsRes.data.filter((a: Agent) => a.slug !== 'supervisor'))
     setConversations(convsRes.data)
   }
 
-  // --- Chat Logic ---
   const loadConversation = async (sessionId: string) => {
-    setActiveSession(sessionId)
-    setIsStreaming(false)
-    setStreamingText('')
-    setStreamingAgent(null)
-    streamingTextRef.current = ''
-    streamingAgentRef.current = null
-    streamingTraceRef.current = null
-    setMessages([])
-
+    setActiveSession(sessionId); setIsStreaming(false); setStreamingText(''); setStreamingAgent(null)
+    streamingTextRef.current = ''; streamingAgentRef.current = null; streamingTraceRef.current = null; setMessages([])
     try {
       const { data } = await chatAPI.getConversation(sessionId)
-      if (!data || !data.messages) {
-        console.error('Resposta inválida ao carregar conversa:', data)
-        return
-      }
-      setMessages(data.messages.map((m: any) => ({
-        role: m.role,
-        content: m.content,
-        agentSlug: m.agent_slug,
-        agentName: m.agent_name,
-        agentEmoji: m.agent_emoji,
-        agentColor: m.agent_color,
-        metadata: m.metadata || m.metadata_,
-      })))
-    } catch (err) {
-      console.error('Erro ao carregar conversa:', err)
-      setActiveSession(null)
-    }
+      if (!data?.messages) return
+      setMessages(data.messages.map((m: any) => ({ role: m.role, content: m.content, agentSlug: m.agent_slug, agentName: m.agent_name, agentEmoji: m.agent_emoji, metadata: m.metadata || m.metadata_ })))
+    } catch { setActiveSession(null) }
   }
 
-  const newChat = () => {
-    setActiveSession(null)
-    setMessages([])
-    setStreamingText('')
-  }
+  const newChat = () => { setActiveSession(null); setMessages([]); setStreamingText('') }
 
   const deleteConversation = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     await chatAPI.deleteConversation(sessionId)
     if (activeSession === sessionId) newChat()
-    loadConversationsList()
-  }
-
-  const loadConversationsList = async () => {
     const { data } = await chatAPI.listConversations({ is_test: true })
     setConversations(data)
   }
@@ -163,42 +82,26 @@ export default function Playground() {
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || isStreaming) return
-
-    const userMsg: Message = { role: 'user', content: text }
-    setMessages(prev => [...prev, userMsg])
-    setInput('')
-    setIsStreaming(true)
-    setStreamingText('')
-    setStreamingAgent(null)
-    streamingTextRef.current = ''
-    streamingAgentRef.current = null
-
+    setMessages(prev => [...prev, { role: 'user', content: text }])
+    setInput(''); setIsStreaming(true); setStreamingText(''); setStreamingAgent(null)
+    streamingTextRef.current = ''; streamingAgentRef.current = null
     try {
-      const response = await chatAPI.streamChat(
-        text, 
-        activeSession || undefined, 
-        selectedAgentSlug || undefined,
-        true
-      )
+      const response = await chatAPI.streamChat(text, activeSession || undefined, selectedAgentSlug || undefined, true)
       const reader = response.body!.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
+        const lines = buffer.split('\n'); buffer = lines.pop() || ''
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           try {
             const event = JSON.parse(line.slice(6))
             if (event.type === 'agent_selected') {
-              const agentInfo = { name: event.agent_name, emoji: event.agent_emoji, color: event.agent_color }
-              streamingAgentRef.current = agentInfo
-              setStreamingAgent(agentInfo)
+              streamingAgentRef.current = { name: event.agent_name, emoji: event.agent_emoji }
+              setStreamingAgent({ name: event.agent_name, emoji: event.agent_emoji })
               if (event.session_id) setActiveSession(event.session_id)
             } else if (event.type === 'token') {
               streamingTextRef.current += event.content
@@ -209,204 +112,118 @@ export default function Playground() {
           } catch {}
         }
       }
-
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: streamingTextRef.current,
-        agentName: streamingAgentRef.current?.name,
-        agentEmoji: streamingAgentRef.current?.emoji,
-        agentColor: streamingAgentRef.current?.color,
-        metadata: streamingTraceRef.current
-      }])
-      setStreamingText('')
-      setStreamingAgent(null)
-      loadConversationsList()
+      setMessages(prev => [...prev, { role: 'assistant', content: streamingTextRef.current, agentName: streamingAgentRef.current?.name, agentEmoji: streamingAgentRef.current?.emoji, metadata: streamingTraceRef.current }])
+      setStreamingText(''); setStreamingAgent(null)
+      const { data } = await chatAPI.listConversations({ is_test: true })
+      setConversations(data)
     } catch {
-      setMessages(prev => [...prev, {
-        role: 'assistant', content: '❌ Erro ao conectar com a IA.',
-      }])
-    } finally {
-      setIsStreaming(false)
-    }
+      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro ao conectar com a IA.' }])
+    } finally { setIsStreaming(false) }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
-  }
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
 
-  // --- Agent Config Logic ---
   useEffect(() => {
-    if (selectedAgentSlug) {
-      loadAgentConfig(selectedAgentSlug)
-    } else {
-      setEditedPrompt('')
-      setEditedParams({ model: '', temperature: 0.7, max_tokens: 2048 })
-      setHasUnsavedChanges(false)
-    }
+    if (selectedAgentSlug) loadAgentConfig(selectedAgentSlug)
+    else { setEditedPrompt(''); setEditedParams({ model: '', temperature: 0.7, max_tokens: 2048 }); setHasUnsavedChanges(false) }
   }, [selectedAgentSlug])
 
   const loadAgentConfig = async (slug: string) => {
-    const [agentRes, promptRes, historyRes] = await Promise.all([
-      agentsAPI.get(slug),
-      promptsAPI.get(slug),
-      promptsAPI.history(slug)
-    ])
-    const agent = agentRes.data
-    const prompt = promptRes.data
-    
-    setEditedPrompt(prompt.system_prompt)
-    setEditedParams({ 
-      model: agent.model, 
-      temperature: agent.temperature, 
-      max_tokens: agent.max_tokens 
-    })
+    const [agentRes, promptRes, historyRes] = await Promise.all([agentsAPI.get(slug), promptsAPI.get(slug), promptsAPI.history(slug)])
+    setEditedPrompt(promptRes.data.system_prompt)
+    setEditedParams({ model: agentRes.data.model, temperature: agentRes.data.temperature, max_tokens: agentRes.data.max_tokens })
     setPromptHistory(historyRes.data)
     setHasUnsavedChanges(false)
-    
-    // Load Tools for this agent
     try {
-      const [allToolsRes, agentToolsRes] = await Promise.all([
-        toolsAPI.list(),
-        toolsAPI.listAgentTools(slug)
-      ])
-      setAllTools(allToolsRes.data)
-      setAgentToolsSlugs(agentToolsRes.data)
-    } catch (err) {
-      console.error('Erro ao carregar ferramentas do agente:', err)
-    }
+      const [allToolsRes, agentToolsRes] = await Promise.all([toolsAPI.list(), toolsAPI.listAgentTools(slug)])
+      setAllTools(allToolsRes.data); setAgentToolsSlugs(agentToolsRes.data)
+    } catch {}
   }
 
   const toggleToolLink = async (toolSlug: string) => {
     if (!selectedAgentSlug) return
     const isLinked = agentToolsSlugs.includes(toolSlug)
     try {
-      if (isLinked) {
-        await toolsAPI.unlink(selectedAgentSlug, toolSlug)
-        setAgentToolsSlugs(prev => prev.filter(s => s !== toolSlug))
-      } else {
-        await toolsAPI.link(selectedAgentSlug, toolSlug)
-        setAgentToolsSlugs(prev => [...prev, toolSlug])
-      }
-    } catch (err) {
-      alert('Erro ao alterar vínculo da ferramenta.')
-    }
+      if (isLinked) { await toolsAPI.unlink(selectedAgentSlug, toolSlug); setAgentToolsSlugs(prev => prev.filter(s => s !== toolSlug)) }
+      else { await toolsAPI.link(selectedAgentSlug, toolSlug); setAgentToolsSlugs(prev => [...prev, toolSlug]) }
+    } catch { alert('Erro ao alterar vínculo.') }
   }
 
   const saveConfig = async () => {
     if (!selectedAgentSlug) return
     setIsSaving(true)
     try {
-      await Promise.all([
-        agentsAPI.update(selectedAgentSlug, editedParams),
-        promptsAPI.update(selectedAgentSlug, { system_prompt: editedPrompt })
-      ])
+      await Promise.all([agentsAPI.update(selectedAgentSlug, editedParams), promptsAPI.update(selectedAgentSlug, { system_prompt: editedPrompt })])
       await loadAgentConfig(selectedAgentSlug)
-      await loadInitialData() // refresh agents list info
+      await loadInitialData()
       setHasUnsavedChanges(false)
-    } catch (err) {
-      alert('Erro ao salvar configurações.')
-    } finally {
-      setIsSaving(false)
-    }
+    } catch { alert('Erro ao salvar.') } finally { setIsSaving(false) }
   }
 
-  const restoreVersion = (p: any) => {
-    setEditedPrompt(p.system_prompt)
-    setHasUnsavedChanges(true)
-  }
-  
   const handleCreateAgent = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newAgentData.slug || !newAgentData.name) return
-    setIsCreatingAgent(true)
-    setCreateError(null)
+    setIsCreatingAgent(true); setCreateError(null)
     try {
       await agentsAPI.create(newAgentData)
       await loadInitialData()
       setIsCreateModalOpen(false)
       setNewAgentData({ slug: '', name: '', emoji: '🤖', description: '', system_prompt: '' })
-    } catch (err: any) {
-      setCreateError(err.response?.data?.detail || 'Erro ao criar agente. Verifique se o slug é único.')
-    } finally {
-      setIsCreatingAgent(false)
-    }
+    } catch (err: any) { setCreateError(err.response?.data?.detail || 'Erro ao criar agente.') } finally { setIsCreatingAgent(false) }
   }
 
-  const handleDeleteAgent = async (slug?: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const targetSlug = slug || selectedAgentSlug;
-    if (!targetSlug) return;
-    
-    const agent = agents.find(a => a.slug === targetSlug);
-    if (!agent) return;
-    
-    if (!confirm(`Tem certeza que deseja excluir o agente "${agent.name}"? Esta ação não pode ser desfeita.`)) return
-    
+  const handleDeleteAgent = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    if (!selectedAgentSlug) return
+    const agent = agents.find(a => a.slug === selectedAgentSlug)
+    if (!agent || !confirm(`Excluir o agente "${agent.name}"? Esta ação não pode ser desfeita.`)) return
     try {
-      await agentsAPI.delete(targetSlug);
-      if (selectedAgentSlug === targetSlug) {
-        setSelectedAgentSlug(null);
-        newChat();
-      }
-      await loadInitialData();
-    } catch (err) {
-      alert('Erro ao excluir agente.');
-    }
+      await agentsAPI.delete(selectedAgentSlug)
+      setSelectedAgentSlug(null); newChat(); setShowConfig(false)
+      await loadInitialData()
+    } catch { alert('Erro ao excluir agente.') }
   }
 
   const currentAgent = selectedAgentSlug ? agents.find(a => a.slug === selectedAgentSlug) : null
 
-  return (
-    <div className="playground-layout">
-      {/* 
-        ESQUEMA DE 3 COLUNAS:
-        1. Sidebar: Conversas e Seleção de Agente
-        2. Main: Chat
-        3. Config (Opcional): Ajustes do Agente
-      */}
+  const layoutCols = selectedAgentSlug && showConfig ? '260px 1fr 320px' : '260px 1fr'
 
-      {/* --- C1: Sidebar Seleção --- */}
+  return (
+    <div className="playground-layout" style={{ gridTemplateColumns: layoutCols }}>
+      {/* C1: Sidebar */}
       <div className="playground-sidebar">
         <div className="playground-sidebar-section">
-          <div className="section-header">
-            <Activity size={14} /> <span>Playground</span>
-          </div>
-          <button 
+          <div className="section-header"><Activity size={14} /><span>Playground</span></div>
+          <button
             className={`selection-item ${selectedAgentSlug === null ? 'active' : ''}`}
             onClick={() => setSelectedAgentSlug(null)}
           >
             <div className="selection-icon geral"><Sliders size={16} /></div>
             <div className="selection-info">
               <div className="name">Geral (Multi-Agente)</div>
-              <div className="desc">Orchestrator Inteligente</div>
+              <div className="desc">Orquestrador Inteligente</div>
             </div>
           </button>
         </div>
 
         <div className="playground-sidebar-section">
-          <div className="section-header">
-            <Bot size={14} /> <span>Especialistas</span>
-          </div>
+          <div className="section-header"><Bot size={14} /><span>Especialistas</span></div>
           <div className="agents-list">
             {agents.map(a => (
-              <div 
+              <div
                 key={a.slug}
                 className={`selection-item ${selectedAgentSlug === a.slug ? 'active' : ''} ${!a.is_active ? 'inactive' : ''}`}
                 onClick={() => setSelectedAgentSlug(a.slug)}
               >
                 <div className="specialist-icon">{a.emoji}</div>
                 <div className="selection-info">
-                  <div className="name">{a.name} {!a.is_active && <span className="opacity-30 text-[10px] ml-1">(OFF)</span>}</div>
+                  <div className="name">{a.name}{!a.is_active && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '6px' }}>(OFF)</span>}</div>
                   <div className="desc">{a.slug}</div>
                 </div>
-                <button 
-                  className="agent-config-btn" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedAgentSlug(a.slug);
-                    setShowConfig(true);
-                  }}
-                  title="Ajustes do Agente"
+                <button
+                  className="agent-config-btn"
+                  onClick={(e) => { e.stopPropagation(); setSelectedAgentSlug(a.slug); setShowConfig(true) }}
+                  title="Configurar Agente"
                 >
                   <Pencil size={12} />
                 </button>
@@ -417,13 +234,13 @@ export default function Playground() {
 
         <div className="playground-sidebar-section conversations">
           <div className="section-header">
-            <MessageSquare size={14} /> <span>Conversas Recentes</span>
+            <MessageSquare size={14} /><span>Conversas</span>
             <button className="btn-icon-sm" onClick={newChat} title="Novo Chat"><Plus size={14} /></button>
           </div>
           <div className="conversation-mini-list">
             {conversations.map(c => (
-              <div 
-                key={c.session_id} 
+              <div
+                key={c.session_id}
                 className={`conv-mini-item ${activeSession === c.session_id ? 'active' : ''}`}
                 onClick={() => loadConversation(c.session_id)}
               >
@@ -431,22 +248,23 @@ export default function Playground() {
                 <button className="delete-btn" onClick={(e) => deleteConversation(c.session_id, e)}><Trash2 size={10} /></button>
               </div>
             ))}
+            {conversations.length === 0 && (
+              <div style={{ padding: '12px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', fontStyle: 'italic' }}>
+                Nenhuma conversa ainda
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="p-4 border-t border-white/5 mt-auto">
-          <button 
-            className="btn btn-secondary w-full gap-2 border-dashed border-white/10 hover:border-white/30"
-            onClick={() => setIsCreateModalOpen(true)}
-          >
-            <Plus size={14} /> <span>Novo Agente</span>
+        <div style={{ padding: '12px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
+          <button className="btn btn-secondary w-full gap-2" style={{ justifyContent: 'center', borderStyle: 'dashed' }} onClick={() => setIsCreateModalOpen(true)}>
+            <Plus size={14} /> Novo Agente
           </button>
         </div>
       </div>
 
-      {/* --- C2: Main Chat AREA --- */}
+      {/* C2: Chat */}
       <div className="playground-main">
-        {/* Header */}
         <header className="playground-header">
           <div className="header-agent-info">
             {currentAgent ? (
@@ -454,7 +272,7 @@ export default function Playground() {
                 <div className="agent-emoji-active">{currentAgent.emoji}</div>
                 <div>
                   <div className="agent-name-active">{currentAgent.name}</div>
-                  <div className="agent-status-active">Modo Especialista Direto</div>
+                  <div className="agent-status-active">Modo Especialista · {currentAgent.is_active ? '🟢 Ativo' : '🔴 Inativo'}</div>
                 </div>
               </>
             ) : (
@@ -462,40 +280,48 @@ export default function Playground() {
                 <div className="agent-emoji-active geral"><Activity size={20} /></div>
                 <div>
                   <div className="agent-name-active">Orquestrador Geral</div>
-                  <div className="agent-status-active">Roteamento Supervisor Ativado</div>
+                  <div className="agent-status-active">Roteamento Automático Ativado</div>
                 </div>
               </>
             )}
           </div>
-          
           <div className="agent-actions">
-            <button 
-              className={`btn btn-sm ${showDebug ? 'btn-primary' : 'btn-secondary'}`} 
-              onClick={() => setShowDebug(!showDebug)} 
+            <button
+              className={`btn btn-sm ${showDebug ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setShowDebug(!showDebug)}
               title="Debug Trace"
             >
-              <Activity size={14} />
+              <Activity size={14} /> Debug
             </button>
+            {selectedAgentSlug && (
+              <button
+                className={`btn btn-sm ${showConfig ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setShowConfig(!showConfig)}
+                title="Configurar agente"
+              >
+                <Pencil size={14} /> Config
+              </button>
+            )}
           </div>
         </header>
 
-        {/* Messages */}
         <div className="playground-chat-area">
           {messages.length === 0 && !streamingText ? (
             <div className="playground-welcome">
               <div className="welcome-icon">
-                {currentAgent ? currentAgent.emoji : <Home size={40} />}
+                {currentAgent ? currentAgent.emoji : <Home size={36} />}
               </div>
               <h2>{currentAgent ? `Chat com ${currentAgent.name}` : 'Bem-vindo ao Playground'}</h2>
               <p>
-                {currentAgent 
-                  ? `Você está enviando mensagens diretamente para o agente ${currentAgent.slug}. O supervisor não interferirá neste chat.`
-                  : 'Fale com nosso sistema multi-agente. A IA decidirá automaticamente qual especialista é melhor para você.'}
+                {currentAgent
+                  ? `Mensagens enviadas diretamente para ${currentAgent.slug}. O supervisor não interferirá.`
+                  : 'Fale com nosso sistema multi-agente. A IA decidirá automaticamente qual especialista responderá.'}
               </p>
               {!currentAgent && (
                 <div className="playground-hints">
                   <div className="hint">"Busque casas de 2 quartos em SP"</div>
-                  <div className="hint">"Como funciona o contrato de locação?"</div>
+                  <div className="hint">"Quanto custa um apê no Brooklin?"</div>
+                  <div className="hint">"Crie um anúncio para este imóvel"</div>
                 </div>
               )}
             </div>
@@ -511,7 +337,7 @@ export default function Playground() {
                       <div className="msg-agent-name">{msg.agentName}</div>
                     )}
                     <div className={`msg-bubble ${msg.role}`}>
-                      <div className="markdown" dangerouslySetInnerHTML={{
+                      <div dangerouslySetInnerHTML={{
                         __html: msg.content
                           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                           .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -521,23 +347,20 @@ export default function Playground() {
                     </div>
                     {showDebug && msg.role === 'assistant' && msg.metadata && (
                       <button className="btn-trace" onClick={() => setSelectedTrace(msg.metadata)}>
-                        <Search size={10} /> Ver processamento
+                        <Activity size={10} /> Ver processamento
                       </button>
                     )}
                   </div>
                 </div>
               ))}
 
-              {/* Streaming */}
               {(isStreaming || streamingText) && (
                 <div className="msg-wrapper assistant">
-                  <div className="msg-avatar bot">
-                    {streamingAgent?.emoji || '🤖'}
-                  </div>
+                  <div className="msg-avatar bot">{streamingAgent?.emoji || '🤖'}</div>
                   <div className="msg-content-container">
                     {streamingAgent && <div className="msg-agent-name">{streamingAgent.name}</div>}
                     <div className="msg-bubble assistant">
-                      {streamingText || <div className="typing-dot-loading" />}
+                      {streamingText || <div className="typing-dot-loading"><span /></div>}
                     </div>
                   </div>
                 </div>
@@ -547,236 +370,164 @@ export default function Playground() {
           )}
         </div>
 
-        {/* Input */}
         <div className="playground-input-footer">
           <div className="input-box-container">
-            <textarea 
+            <textarea
               ref={textareaRef}
-              placeholder="Digite sua mensagem..."
+              placeholder={isStreaming ? 'Aguardando resposta...' : 'Digite sua mensagem... (Enter para enviar)'}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={1}
               disabled={isStreaming}
             />
-            <button 
-              className="btn-send" 
-              onClick={sendMessage} 
-              disabled={isStreaming || !input.trim()}
-            >
-              <Send size={18} />
+            <button className="btn-send" onClick={sendMessage} disabled={isStreaming || !input.trim()}>
+              <Send size={17} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* --- C3: Config Panel (Right) --- */}
+      {/* C3: Config Panel */}
       {selectedAgentSlug && showConfig && (
         <div className="playground-config-panel">
           <div className="config-header">
-            <div className="flex items-center gap-2">
-              <Pencil size={16} />
-              <span>Configurações do Agente</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+              <Pencil size={15} /> Configurações do Agente
             </div>
-            <button className="btn-icon-sm" onClick={() => setShowConfig(false)}><ChevronRight size={18} /></button>
+            <button className="btn-icon-sm" onClick={() => setShowConfig(false)}><ChevronRight size={17} /></button>
           </div>
 
           <div className="config-scroll-area">
-            {/* System Prompt */}
             <div className="config-section">
-              <label className="config-label">System Prompt</label>
+              <div className="config-label">System Prompt</div>
               <div className="prompt-editor-wrapper">
-                <textarea 
+                <textarea
                   className="prompt-editor"
                   value={editedPrompt}
-                  onChange={(e) => { setEditedPrompt(e.target.value); setHasUnsavedChanges(true); }}
+                  onChange={(e) => { setEditedPrompt(e.target.value); setHasUnsavedChanges(true) }}
                   placeholder="Defina o comportamento do agente aqui..."
                 />
               </div>
             </div>
 
-            {/* Model & Params */}
             <div className="config-section">
-              <label className="config-label">Modelo LLM (OpenRouter)</label>
-              <select 
-                className="form-select"
-                value={editedParams.model}
-                onChange={(e) => { setEditedParams({...editedParams, model: e.target.value}); setHasUnsavedChanges(true); }}
-              >
+              <div className="config-label">Modelo LLM</div>
+              <select className="form-select" value={editedParams.model} onChange={(e) => { setEditedParams({ ...editedParams, model: e.target.value }); setHasUnsavedChanges(true) }}>
                 {MODELS_COMMON.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
 
             <div className="config-section">
-              <div className="flex justify-between items-center mb-2">
-                <label className="config-label m-0">Temperatura</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div className="config-label" style={{ marginBottom: 0 }}>Temperatura</div>
                 <span className="value-badge">{editedParams.temperature}</span>
               </div>
-              <input 
-                type="range" min="0" max="1.5" step="0.1" 
-                value={editedParams.temperature}
-                onChange={(e) => { setEditedParams({...editedParams, temperature: Number(e.target.value)}); setHasUnsavedChanges(true); }}
-              />
+              <input type="range" min="0" max="1.5" step="0.1" value={editedParams.temperature} onChange={(e) => { setEditedParams({ ...editedParams, temperature: Number(e.target.value) }); setHasUnsavedChanges(true) }} />
             </div>
 
             <div className="config-section">
-              <div className="flex justify-between items-center mb-2">
-                <label className="config-label m-0">Max Tokens</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div className="config-label" style={{ marginBottom: 0 }}>Max Tokens</div>
                 <span className="value-badge">{editedParams.max_tokens}</span>
               </div>
-              <input 
-                type="range" min="256" max="8192" step="256" 
-                value={editedParams.max_tokens}
-                onChange={(e) => { setEditedParams({...editedParams, max_tokens: Number(e.target.value)}); setHasUnsavedChanges(true); }}
-              />
+              <input type="range" min="256" max="8192" step="256" value={editedParams.max_tokens} onChange={(e) => { setEditedParams({ ...editedParams, max_tokens: Number(e.target.value) }); setHasUnsavedChanges(true) }} />
             </div>
 
-            {/* Tools Section - Professional Searchable Select */}
             <div className="config-section">
-              <label className="config-label flex items-center gap-2">
-                <Wrench size={13} /> Ferramentas do Agente
-              </label>
-              
-              <div className="mt-3 space-y-3">
-                {/* Linked Tools Chips */}
-                <div className="flex flex-wrap gap-2">
-                  {agentToolsSlugs.map(slug => {
-                    const tool = allTools.find(t => t.slug === slug)
-                    if (!tool) return null
-                    return (
-                      <div key={slug} className="flex items-center gap-1.5 bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold px-2 py-1 rounded-md">
-                        <span>{tool.name}</span>
-                        <button 
-                          onClick={() => toggleToolLink(slug)}
-                          className="hover:text-white transition-colors"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    )
-                  })}
-                  {agentToolsSlugs.length === 0 && (
-                    <div className="text-[10px] text-muted italic">Nenhuma ferramenta vinculada.</div>
-                  )}
-                </div>
-
-                {/* Searchable Select */}
-                <div className="relative">
-                  <div 
-                    className={`flex items-center justify-between bg-white/5 border ${isToolDropdownOpen ? 'border-primary' : 'border-white/10'} rounded-lg p-2.5 cursor-pointer hover:bg-white/10 transition-all`}
-                    onClick={() => setIsToolDropdownOpen(!isToolDropdownOpen)}
-                  >
-                    <span className="text-xs text-muted">Vincular nova ferramenta...</span>
-                    <Plus size={14} className="text-muted" />
-                  </div>
-
-                  {isToolDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-[#1A1A1A] border border-white/10 rounded-xl shadow-2xl z-[60] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="p-3 border-bottom border-white/5 bg-white/5 flex items-center gap-2">
-                        <SearchIcon size={14} className="text-muted" />
-                        <input 
-                          type="text" 
-                          autoFocus
-                          placeholder="Pesquisar ferramenta..." 
-                          className="bg-transparent border-none text-xs text-white focus:outline-none w-full"
-                          value={toolSearchTerm}
-                          onChange={(e) => setToolSearchTerm(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <div className="max-h-[200px] overflow-y-auto p-1 custom-scrollbar">
-                        {allTools
-                          .filter(t => !agentToolsSlugs.includes(t.slug))
-                          .filter(t => 
-                            t.name.toLowerCase().includes(toolSearchTerm.toLowerCase()) || 
-                            t.slug.toLowerCase().includes(toolSearchTerm.toLowerCase())
-                          ).map(tool => (
-                            <div 
-                              key={tool.slug}
-                              className="flex items-center justify-between p-2.5 rounded-lg hover:bg-white/5 cursor-pointer group transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                toggleToolLink(tool.slug)
-                                setToolSearchTerm('')
-                              }}
-                            >
-                              <div className="flex flex-col">
-                                <span className="text-[11px] font-bold text-white group-hover:text-primary transition-colors">{tool.name}</span>
-                                <span className="text-[9px] text-muted font-mono">{tool.slug}</span>
-                              </div>
-                              <Plus size={12} className="text-muted group-hover:text-primary" />
-                            </div>
-                          ))}
-                        {allTools.filter(t => !agentToolsSlugs.includes(t.slug)).length === 0 && (
-                          <div className="p-4 text-center text-[10px] text-muted italic">Todas as ferramentas já vinculadas.</div>
-                        )}
-                      </div>
+              <div className="config-label"><Wrench size={13} /> Ferramentas</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                {agentToolsSlugs.map(slug => {
+                  const tool = allTools.find(t => t.slug === slug)
+                  if (!tool) return null
+                  return (
+                    <div key={slug} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'var(--accent-dim)', border: '1px solid rgba(16,185,129,0.3)', color: 'var(--accent)', fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-full)' }}>
+                      <span>{tool.name}</span>
+                      <button onClick={() => toggleToolLink(slug)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={11} /></button>
                     </div>
-                  )}
+                  )
+                })}
+                {agentToolsSlugs.length === 0 && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma ferramenta vinculada.</div>}
+              </div>
+              <div style={{ position: 'relative' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-elevated)', border: `1px solid ${isToolDropdownOpen ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--radius-md)', padding: '8px 12px', cursor: 'pointer', transition: 'var(--transition)', fontSize: '0.78rem', color: 'var(--text-muted)' }}
+                  onClick={() => setIsToolDropdownOpen(!isToolDropdownOpen)}
+                >
+                  <span>Vincular ferramenta...</span>
+                  <Plus size={14} />
                 </div>
+                {isToolDropdownOpen && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', zIndex: 60, overflow: 'hidden' }}>
+                    <div style={{ padding: '8px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)' }}>
+                      <SearchIcon size={13} style={{ color: 'var(--text-muted)' }} />
+                      <input autoFocus type="text" placeholder="Pesquisar..." style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '0.78rem', color: 'var(--text-primary)', width: '100%' }} value={toolSearchTerm} onChange={e => setToolSearchTerm(e.target.value)} onClick={e => e.stopPropagation()} />
+                    </div>
+                    <div style={{ maxHeight: '180px', overflowY: 'auto', padding: '4px' }}>
+                      {allTools.filter(t => !agentToolsSlugs.includes(t.slug)).filter(t => t.name.toLowerCase().includes(toolSearchTerm.toLowerCase())).map(tool => (
+                        <div key={tool.slug} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'var(--transition)' }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)'}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                          onClick={e => { e.stopPropagation(); toggleToolLink(tool.slug); setToolSearchTerm('') }}>
+                          <div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>{tool.name}</div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{tool.slug}</div>
+                          </div>
+                          <Plus size={12} style={{ color: 'var(--text-muted)' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* History */}
             <div className="config-section">
-              <label className="config-label flex items-center gap-1">
-                <HistoryIcon size={13} /> Histórico de Prompts
-              </label>
+              <div className="config-label"><HistoryIcon size={13} /> Histórico de Prompts</div>
               <div className="history-compact-list">
-                {promptHistory.map((h) => (
+                {promptHistory.map(h => (
                   <div key={h.id} className="history-mini-item">
                     <div>
                       <span className="v-tag">v{h.version}</span>
                       <span className="date">{new Date(h.updated_at).toLocaleDateString('pt-BR')}</span>
                     </div>
                     {!h.is_active && (
-                      <button onClick={() => restoreVersion(h)} className="btn-restore" title="Restaurar versão">
+                      <button onClick={() => { setEditedPrompt(h.system_prompt); setHasUnsavedChanges(true) }} className="btn-restore" title="Restaurar versão">
                         <RotateCcw size={12} />
                       </button>
                     )}
                   </div>
                 ))}
+                {promptHistory.length === 0 && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px' }}>Nenhum histórico</div>}
               </div>
             </div>
           </div>
 
           <div className="config-footer">
-            <div className="flex items-center justify-between mb-4 p-3 bg-white/5 rounded-lg border border-white/10">
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-white">Status do Agente</span>
-                <span className="text-[10px] text-muted uppercase tracking-wider">
-                  {currentAgent?.is_active ? 'Ativo no Sistema' : 'Desativado'}
-                </span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>Status do Agente</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {currentAgent?.is_active ? '🟢 Ativo no Sistema' : '🔴 Desativado'}
+                </div>
               </div>
-              <button 
+              <button
                 onClick={async () => {
                   if (!selectedAgentSlug) return
-                  const newStatus = !currentAgent?.is_active
-                  await agentsAPI.toggle(selectedAgentSlug, newStatus)
-                  loadInitialData() // Atualiza a lista lateral
+                  await agentsAPI.toggle(selectedAgentSlug, !currentAgent?.is_active)
+                  loadInitialData()
                 }}
                 className={`toggle-btn ${currentAgent?.is_active ? 'active' : ''}`}
               >
                 <div className="toggle-slider" />
               </button>
             </div>
-
-            {hasUnsavedChanges && (
-              <div className="unsaved-warning">⚠️ Alterações não salvas</div>
-            )}
-            <button 
-              className="btn btn-primary w-full" 
-              onClick={saveConfig} 
-              disabled={isSaving || !hasUnsavedChanges}
-            >
-              {isSaving ? <div className="spinner" /> : <><Save size={16} /> Salvar Ajustes</>}
+            {hasUnsavedChanges && <div className="unsaved-warning">⚠️ Alterações não salvas</div>}
+            <button className="btn btn-primary w-full" style={{ justifyContent: 'center' }} onClick={saveConfig} disabled={isSaving || !hasUnsavedChanges}>
+              {isSaving ? <div className="spinner" /> : <><Save size={15} /> Salvar Ajustes</>}
             </button>
-
             {currentAgent && (
-              <button 
-                className="btn btn-danger w-full mt-2 bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20" 
-                onClick={(e) => handleDeleteAgent(undefined, e)}
-              >
+              <button className="btn btn-danger w-full" style={{ justifyContent: 'center' }} onClick={handleDeleteAgent}>
                 <Trash2 size={14} /> Excluir Agente
               </button>
             )}
@@ -786,105 +537,48 @@ export default function Playground() {
 
       {/* New Agent Modal */}
       {isCreateModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-3">
-                <div className="bg-primary/20 p-2.5 rounded-xl text-primary"><Bot size={22} /></div>
+        <div className="modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: 42, height: 42, borderRadius: 'var(--radius-md)', background: 'var(--primary-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                  <Bot size={22} />
+                </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight">Novo Especialista</h2>
-                  <p className="text-[10px] text-muted uppercase tracking-widest font-bold">Configuração Inicial</p>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.15rem', color: 'var(--text-primary)' }}>Novo Especialista</h2>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Configuração Inicial</p>
                 </div>
               </div>
-              <button onClick={() => { setIsCreateModalOpen(false); setCreateError(null); }} className="p-2 hover:bg-white/5 rounded-full text-muted hover:text-white transition-all">
-                <X size={20} />
-              </button>
+              <button className="btn-icon-sm" onClick={() => { setIsCreateModalOpen(false); setCreateError(null) }}><X size={18} /></button>
             </div>
-
-            {createError && (
-              <div className="error-alert">
-                <Activity size={14} />
-                <span>{createError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleCreateAgent} className="space-y-5">
-              <div className="modal-form-group">
-                <label className="modal-form-label">Nome do Agente</label>
-                <input 
-                  type="text" 
-                  className="modal-input" 
-                  placeholder="Ex: Consultor Jurídico"
-                  value={newAgentData.name}
-                  onChange={e => setNewAgentData({...newAgentData, name: e.target.value})}
-                  required
-                />
-              </div>
-
-              <div className="modal-form-group">
-                <label className="modal-form-label">ID Único (Slug)</label>
-                <input 
-                  type="text" 
-                  className="modal-input font-mono" 
-                  placeholder="ex: consultor_jurudico"
-                  value={newAgentData.slug}
-                  onChange={e => setNewAgentData({...newAgentData, slug: e.target.value.toLowerCase().replace(/\s+/g, '_')})}
-                  required
-                />
-                <p className="text-[9px] text-muted mt-2">Este ID será usado internamente pelo sistema.</p>
-              </div>
-
-              <div className="grid grid-cols-4 gap-4">
-                <div className="col-span-1">
-                  <label className="modal-form-label">Emoji</label>
-                  <input 
-                    type="text" 
-                    className="modal-input text-center text-xl" 
-                    value={newAgentData.emoji}
-                    onChange={e => setNewAgentData({...newAgentData, emoji: e.target.value})}
-                  />
+            {createError && <div style={{ background: 'var(--error-dim)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--error)', padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', marginBottom: '16px' }}>⚠️ {createError}</div>}
+            <form onSubmit={handleCreateAgent} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="form-label">Emoji</label>
+                  <input className="form-input" value={newAgentData.emoji} onChange={e => setNewAgentData({ ...newAgentData, emoji: e.target.value })} style={{ fontSize: '1.5rem', textAlign: 'center' }} />
                 </div>
-                <div className="col-span-3">
-                  <label className="modal-form-label">Descrição Breve</label>
-                  <input 
-                    type="text" 
-                    className="modal-input" 
-                    placeholder="O que este agente faz?"
-                    value={newAgentData.description}
-                    onChange={e => setNewAgentData({...newAgentData, description: e.target.value})}
-                  />
+                <div className="form-group">
+                  <label className="form-label">Slug (único) *</label>
+                  <input className="form-input" placeholder="ex: analista_fiscal" value={newAgentData.slug} onChange={e => setNewAgentData({ ...newAgentData, slug: e.target.value.toLowerCase().replace(/\s+/g, '_') })} required />
                 </div>
               </div>
-
-              <div className="modal-form-group">
-                <label className="modal-form-label">System Prompt <span className="text-red-400">*</span></label>
-                <textarea
-                  className="modal-input font-mono"
-                  style={{ minHeight: '160px', resize: 'vertical', lineHeight: '1.6' }}
-                  placeholder="Você é o [Nome do Agente], especialista em...
-
-Descreva aqui o comportamento, escopo, tom de voz e regras do agente."
-                  value={newAgentData.system_prompt}
-                  onChange={e => setNewAgentData({...newAgentData, system_prompt: e.target.value})}
-                  required
-                />
-                <p className="text-[9px] text-muted mt-2">Define a personalidade, escopo e comportamento do agente. Mínimo 20 caracteres.</p>
+              <div className="form-group">
+                <label className="form-label">Nome do Agente *</label>
+                <input className="form-input" placeholder="Ex: Analista Fiscal Imobiliário" value={newAgentData.name} onChange={e => setNewAgentData({ ...newAgentData, name: e.target.value })} required />
               </div>
-
-              <div className="pt-4 flex gap-3">
-                <button 
-                  type="button"
-                  className="btn btn-secondary flex-1 py-3"
-                  onClick={() => { setIsCreateModalOpen(false); setCreateError(null); }}
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  className="btn btn-primary flex-1 py-3 shadow-xl"
-                  disabled={isCreatingAgent || !newAgentData.slug || !newAgentData.name || newAgentData.system_prompt.length < 20}
-                >
-                  {isCreatingAgent ? <div className="spinner" /> : 'Criar Agente'}
+              <div className="form-group">
+                <label className="form-label">Descrição</label>
+                <input className="form-input" placeholder="O que este agente faz?" value={newAgentData.description} onChange={e => setNewAgentData({ ...newAgentData, description: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">System Prompt Inicial</label>
+                <textarea className="form-textarea" style={{ minHeight: '100px', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }} placeholder="Você é um especialista em..." value={newAgentData.system_prompt} onChange={e => setNewAgentData({ ...newAgentData, system_prompt: e.target.value })} />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setIsCreateModalOpen(false); setCreateError(null) }}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={isCreatingAgent}>
+                  {isCreatingAgent ? <div className="spinner" /> : '🤖 Criar Agente'}
                 </button>
               </div>
             </form>
@@ -892,12 +586,7 @@ Descreva aqui o comportamento, escopo, tom de voz e regras do agente."
         </div>
       )}
 
-      {/* Trace Modal */}
-      <TraceModal 
-        isOpen={selectedTrace !== null} 
-        onClose={() => setSelectedTrace(null)} 
-        trace={selectedTrace} 
-      />
+      <TraceModal isOpen={selectedTrace !== null} onClose={() => setSelectedTrace(null)} trace={selectedTrace} />
     </div>
   )
 }

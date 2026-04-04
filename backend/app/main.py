@@ -126,7 +126,6 @@ app.include_router(agents.router,     prefix="/api/v1/agents",     tags=["🤖 A
 app.include_router(prompts.router,    prefix="/api/v1/prompts",    tags=["🎛️ Prompts"])
 app.include_router(chat.router,       prefix="/api/v1/chat",       tags=["💬 Chat"])
 app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
-app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
 app.include_router(logs.router,       prefix="/api/v1/logs",       tags=["📜 Logs"])
 app.include_router(tools.router,      prefix="/api/v1/tools",      tags=["🛠️ Ferramentas"])
 

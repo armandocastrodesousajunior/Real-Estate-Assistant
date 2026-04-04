@@ -1,8 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import {
-  LayoutDashboard, Building2, Bot,
-  Users, LogOut, Activity, Home,
+  LayoutDashboard, Building2, Bot, Users, LogOut, Activity, Home,
   ChevronDown, ChevronUp, Wrench
 } from 'lucide-react'
 
@@ -10,9 +9,9 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/properties', icon: Building2, label: 'Imóveis' },
   { to: '/leads', icon: Users, label: 'Leads' },
-  { 
-    to: '/playground', 
-    icon: Bot, 
+  {
+    to: '/playground',
+    icon: Bot,
     label: 'Playground',
     subItems: [
       { to: '/playground/agents', icon: Bot, label: 'Agentes' },
@@ -24,45 +23,42 @@ const navItems = [
 
 export default function Layout() {
   const navigate = useNavigate()
-  const userName = 'Admin'
 
   const handleLogout = () => {
     localStorage.removeItem('rea_token')
-    navigate('/login')
-    window.location.reload()
+    window.location.href = '/login'
   }
 
   return (
     <div className="app-shell">
-      {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
           <div className="logo-mark">
             <div className="logo-icon">
-              <Home size={18} strokeWidth={2.5} color="#000" />
+              <Home size={18} strokeWidth={2.5} color="#fff" />
             </div>
-            <div className="logo-text">Real<span>Estate</span></div>
+            <div className="logo-text">Realty<span>AI</span></div>
           </div>
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section-title">Menu</div>
+          <div className="nav-section-title">Menu Principal</div>
           {navItems.map((item) => {
             const { to, icon: Icon, label, subItems } = item
-            const [isExpanded, setIsExpanded] = useState(true)
+            const [expanded, setExpanded] = useState(true)
 
             if (subItems) {
               return (
                 <div key={to} className="nav-group">
-                  <div 
-                    className={`nav-item group-header ${window.location.pathname.startsWith(to) ? 'active' : ''}`}
-                    onClick={() => setIsExpanded(!isExpanded)}
+                  <div
+                    className={`nav-item group-header ${typeof window !== 'undefined' && window.location.pathname.startsWith(to) ? 'active' : ''}`}
+                    onClick={() => setExpanded(!expanded)}
                   >
                     <Icon className="nav-icon" size={17} />
                     <span style={{ flex: 1 }}>{label}</span>
-                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                   </div>
-                  {isExpanded && (
+                  {expanded && (
                     <div className="nav-subitems">
                       {subItems.map((sub) => (
                         <NavLink
@@ -70,7 +66,7 @@ export default function Layout() {
                           to={sub.to}
                           className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}
                         >
-                          <sub.icon className="nav-icon" size={14} />
+                          <sub.icon size={13} />
                           {sub.label}
                         </NavLink>
                       ))}
@@ -97,8 +93,8 @@ export default function Layout() {
           <div className="user-info">
             <div className="user-avatar">A</div>
             <div style={{ flex: 1 }}>
-              <div className="user-name">{userName}</div>
-              <div className="user-email">admin@realestateassistant.com</div>
+              <div className="user-name">Admin</div>
+              <div className="user-email">admin@realtyai.com</div>
             </div>
             <button
               className="btn btn-ghost btn-sm"
@@ -112,7 +108,6 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="main-content">
         <Outlet />
       </main>
