@@ -131,9 +131,21 @@ export const toolsAPI = {
   create: (data: any) => api.post('/api/v1/tools/', data),
   delete: (slug: string) => api.delete(`/api/v1/tools/${slug}`),
   listAgentTools: (agentSlug: string) => api.get(`/api/v1/tools/agent/${agentSlug}`),
-  link: (agentSlug: string, toolSlug: string) => 
+  link: (agentSlug: string, toolSlug: string) =>
     api.post('/api/v1/tools/link', { agent_slug: agentSlug, tool_slug: toolSlug, action: 'link' }),
-  unlink: (agentSlug: string, toolSlug: string) => 
+  unlink: (agentSlug: string, toolSlug: string) =>
     api.post('/api/v1/tools/link', { agent_slug: agentSlug, tool_slug: toolSlug, action: 'unlink' }),
+  /** Sandbox AI: streaming SSE */
+  streamSandbox: (slug: string, message: string, history: Array<{ role: string; content: string }>) => {
+    const token = localStorage.getItem('rea_token')
+    return fetch(`/api/v1/tools/${slug}/sandbox`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ message, history }),
+    })
+  },
 }
 
