@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { 
   Plus, Send, Trash2, Activity, Search, Home, 
   MessageSquare, Bot, Save, History as HistoryIcon, 
-  RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Link, Link2Off, Search as SearchIcon, Check
+  RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Search as SearchIcon
 } from 'lucide-react'
 import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
@@ -74,12 +74,12 @@ export default function Playground() {
   
   // New Agent Modal
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [newAgentData, setNewAgentData] = useState({ slug: '', name: '', emoji: '🤖', description: '' })
+  const [newAgentData, setNewAgentData] = useState({ slug: '', name: '', emoji: '🤖', description: '', system_prompt: '' })
   const [isCreatingAgent, setIsCreatingAgent] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   
   const [allTools, setAllTools] = useState<any[]>([])
   const [agentToolsSlugs, setAgentToolsSlugs] = useState<string[]>([])
-  const [isUpdatingTools, setIsUpdatingTools] = useState(false)
   const [toolSearchTerm, setToolSearchTerm] = useState('')
   const [isToolDropdownOpen, setIsToolDropdownOpen] = useState(false)
 
@@ -278,7 +278,6 @@ export default function Playground() {
 
   const toggleToolLink = async (toolSlug: string) => {
     if (!selectedAgentSlug) return
-    setIsUpdatingTools(true)
     const isLinked = agentToolsSlugs.includes(toolSlug)
     try {
       if (isLinked) {
@@ -290,8 +289,6 @@ export default function Playground() {
       }
     } catch (err) {
       alert('Erro ao alterar vínculo da ferramenta.')
-    } finally {
-      setIsUpdatingTools(false)
     }
   }
 
@@ -322,14 +319,14 @@ export default function Playground() {
     e.preventDefault()
     if (!newAgentData.slug || !newAgentData.name) return
     setIsCreatingAgent(true)
+    setCreateError(null)
     try {
       await agentsAPI.create(newAgentData)
       await loadInitialData()
       setIsCreateModalOpen(false)
-      setNewAgentData({ slug: '', name: '', emoji: '🤖', description: '' })
-      alert('Agente criado com sucesso!')
+      setNewAgentData({ slug: '', name: '', emoji: '🤖', description: '', system_prompt: '' })
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Erro ao criar agente.')
+      setCreateError(err.response?.data?.detail || 'Erro ao criar agente. Verifique se o slug é único.')
     } finally {
       setIsCreatingAgent(false)
     }
@@ -397,7 +394,7 @@ export default function Playground() {
                 className={`selection-item ${selectedAgentSlug === a.slug ? 'active' : ''} ${!a.is_active ? 'inactive' : ''}`}
                 onClick={() => setSelectedAgentSlug(a.slug)}
               >
-                <div className="selection-icon">{a.emoji}</div>
+                <div className="specialist-icon">{a.emoji}</div>
                 <div className="selection-info">
                   <div className="name">{a.name} {!a.is_active && <span className="opacity-30 text-[10px] ml-1">(OFF)</span>}</div>
                   <div className="desc">{a.slug}</div>
@@ -789,24 +786,34 @@ export default function Playground() {
 
       {/* New Agent Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#111111] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center mb-6">
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-3">
-                <div className="bg-primary/20 p-2 rounded-lg text-primary"><Bot size={20} /></div>
-                <h2 className="text-xl font-bold text-white">Criar Novo Agente</h2>
+                <div className="bg-primary/20 p-2.5 rounded-xl text-primary"><Bot size={22} /></div>
+                <div>
+                  <h2 className="text-xl font-bold text-white tracking-tight">Novo Especialista</h2>
+                  <p className="text-[10px] text-muted uppercase tracking-widest font-bold">Configuração Inicial</p>
+                </div>
               </div>
-              <button onClick={() => setIsCreateModalOpen(false)} className="text-muted hover:text-white transition-colors">
+              <button onClick={() => { setIsCreateModalOpen(false); setCreateError(null); }} className="p-2 hover:bg-white/5 rounded-full text-muted hover:text-white transition-all">
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAgent} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-muted uppercase mb-1 block">Nome do Agente</label>
+            {createError && (
+              <div className="error-alert">
+                <Activity size={14} />
+                <span>{createError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateAgent} className="space-y-5">
+              <div className="modal-form-group">
+                <label className="modal-form-label">Nome do Agente</label>
                 <input 
                   type="text" 
-                  className="form-input w-full" 
+                  className="modal-input" 
                   placeholder="Ex: Consultor Jurídico"
                   value={newAgentData.name}
                   onChange={e => setNewAgentData({...newAgentData, name: e.target.value})}
@@ -814,33 +821,34 @@ export default function Playground() {
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-muted uppercase mb-1 block">Slug (ID único)</label>
+              <div className="modal-form-group">
+                <label className="modal-form-label">ID Único (Slug)</label>
                 <input 
                   type="text" 
-                  className="form-input w-full" 
+                  className="modal-input font-mono" 
                   placeholder="ex: consultor_jurudico"
                   value={newAgentData.slug}
                   onChange={e => setNewAgentData({...newAgentData, slug: e.target.value.toLowerCase().replace(/\s+/g, '_')})}
                   required
                 />
+                <p className="text-[9px] text-muted mt-2">Este ID será usado internamente pelo sistema.</p>
               </div>
 
-              <div className="flex gap-4">
-                <div className="w-20">
-                  <label className="text-xs font-bold text-muted uppercase mb-1 block">Emoji</label>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="col-span-1">
+                  <label className="modal-form-label">Emoji</label>
                   <input 
                     type="text" 
-                    className="form-input w-full text-center" 
+                    className="modal-input text-center text-xl" 
                     value={newAgentData.emoji}
                     onChange={e => setNewAgentData({...newAgentData, emoji: e.target.value})}
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="text-xs font-bold text-muted uppercase mb-1 block">Descrição Simples</label>
+                <div className="col-span-3">
+                  <label className="modal-form-label">Descrição Breve</label>
                   <input 
                     type="text" 
-                    className="form-input w-full" 
+                    className="modal-input" 
                     placeholder="O que este agente faz?"
                     value={newAgentData.description}
                     onChange={e => setNewAgentData({...newAgentData, description: e.target.value})}
@@ -848,18 +856,33 @@ export default function Playground() {
                 </div>
               </div>
 
+              <div className="modal-form-group">
+                <label className="modal-form-label">System Prompt <span className="text-red-400">*</span></label>
+                <textarea
+                  className="modal-input font-mono"
+                  style={{ minHeight: '160px', resize: 'vertical', lineHeight: '1.6' }}
+                  placeholder="Você é o [Nome do Agente], especialista em...
+
+Descreva aqui o comportamento, escopo, tom de voz e regras do agente."
+                  value={newAgentData.system_prompt}
+                  onChange={e => setNewAgentData({...newAgentData, system_prompt: e.target.value})}
+                  required
+                />
+                <p className="text-[9px] text-muted mt-2">Define a personalidade, escopo e comportamento do agente. Mínimo 20 caracteres.</p>
+              </div>
+
               <div className="pt-4 flex gap-3">
                 <button 
                   type="button"
-                  className="btn btn-secondary flex-1"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  className="btn btn-secondary flex-1 py-3"
+                  onClick={() => { setIsCreateModalOpen(false); setCreateError(null); }}
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="btn btn-primary flex-1"
-                  disabled={isCreatingAgent || !newAgentData.slug || !newAgentData.name}
+                  className="btn btn-primary flex-1 py-3 shadow-xl"
+                  disabled={isCreatingAgent || !newAgentData.slug || !newAgentData.name || newAgentData.system_prompt.length < 20}
                 >
                   {isCreatingAgent ? <div className="spinner" /> : 'Criar Agente'}
                 </button>

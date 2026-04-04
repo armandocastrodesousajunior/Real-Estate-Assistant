@@ -128,12 +128,27 @@ async def create_agent(
         raise HTTPException(status_code=400, detail=f"O slug '{data.slug}' já está em uso.")
 
     agent = Agent(
-        **data.model_dump(),
-        is_system=False,  # Novos agentes criados pela API nunca são de sistema
+        slug=data.slug,
+        name=data.name,
+        emoji=data.emoji,
+        description=data.description,
+        is_system=False,
         is_active=True
     )
     
     db.add(agent)
+    await db.flush()  # garante que o agent.slug está disponível
+
+    # Cria o prompt com o system_prompt fornecido pelo usuário
+    prompt = Prompt(
+        agent_slug=agent.slug,
+        version=1,
+        is_active=True,
+        system_prompt=data.system_prompt,
+        notes="Prompt inicial definido na criação do agente."
+    )
+    db.add(prompt)
+
     await db.commit()
     await db.refresh(agent)
     return AgentResponse.model_validate(agent)
