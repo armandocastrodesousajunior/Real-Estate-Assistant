@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
+import AgentIcon from '../components/AgentIcon'
 
 interface Message { role: string; content: string; agentSlug?: string; agentName?: string; agentEmoji?: string; metadata?: any }
 interface Conversation { id: number; session_id: string; title?: string; message_count: number; updated_at: string }
@@ -215,7 +216,7 @@ export default function Playground() {
                 className={`selection-item ${selectedAgentSlug === a.slug ? 'active' : ''} ${!a.is_active ? 'inactive' : ''}`}
                 onClick={() => setSelectedAgentSlug(a.slug)}
               >
-                <div className="specialist-icon">{a.emoji}</div>
+                <AgentIcon name={a.name} emoji={a.emoji} size="sm" />
                 <div className="selection-info">
                   <div className="name">{a.name}{!a.is_active && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '6px' }}>(OFF)</span>}</div>
                   <div className="desc">{a.slug}</div>
@@ -269,7 +270,7 @@ export default function Playground() {
           <div className="header-agent-info">
             {currentAgent ? (
               <>
-                <div className="agent-emoji-active">{currentAgent.emoji}</div>
+                <AgentIcon name={currentAgent.name} emoji={currentAgent.emoji} />
                 <div>
                   <div className="agent-name-active">{currentAgent.name}</div>
                   <div className="agent-status-active">Modo Especialista · {currentAgent.is_active ? '🟢 Ativo' : '🔴 Inativo'}</div>
@@ -309,7 +310,7 @@ export default function Playground() {
           {messages.length === 0 && !streamingText ? (
             <div className="playground-welcome">
               <div className="welcome-icon">
-                {currentAgent ? currentAgent.emoji : <Home size={36} />}
+                {currentAgent ? <AgentIcon name={currentAgent.name} emoji={currentAgent.emoji} size="xl" /> : <Home size={36} />}
               </div>
               <h2>{currentAgent ? `Chat com ${currentAgent.name}` : 'Bem-vindo ao Playground'}</h2>
               <p>
@@ -330,7 +331,7 @@ export default function Playground() {
               {messages.map((msg, i) => (
                 <div key={i} className={`msg-wrapper ${msg.role}`}>
                   <div className={`msg-avatar ${msg.role === 'user' ? 'user' : 'bot'}`}>
-                    {msg.role === 'user' ? 'U' : (msg.agentEmoji || '🤖')}
+                    {msg.role === 'user' ? 'U' : <AgentIcon name={msg.agentName || 'IA'} emoji={msg.agentEmoji} size="xs" />}
                   </div>
                   <div className="msg-content-container">
                     {msg.role === 'assistant' && msg.agentName && (
@@ -356,7 +357,9 @@ export default function Playground() {
 
               {(isStreaming || streamingText) && (
                 <div className="msg-wrapper assistant">
-                  <div className="msg-avatar bot">{streamingAgent?.emoji || '🤖'}</div>
+                  <div className="msg-avatar bot" style={{ background: 'transparent' }}>
+                    <AgentIcon name={streamingAgent?.name || 'IA'} emoji={streamingAgent?.emoji} size="xs" />
+                  </div>
                   <div className="msg-content-container">
                     {streamingAgent && <div className="msg-agent-name">{streamingAgent.name}</div>}
                     <div className="msg-bubble assistant">

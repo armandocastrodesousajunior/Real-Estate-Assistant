@@ -135,6 +135,11 @@ export const toolsAPI = {
     api.post('/api/v1/tools/link', { agent_slug: agentSlug, tool_slug: toolSlug, action: 'link' }),
   unlink: (agentSlug: string, toolSlug: string) =>
     api.post('/api/v1/tools/link', { agent_slug: agentSlug, tool_slug: toolSlug, action: 'unlink' }),
+  /** Retorna o schema de parâmetros (formulário manual) */
+  getSchema: (slug: string) => api.get(`/api/v1/tools/${slug}/schema`),
+  /** Executa a ferramenta com parâmetros reais */
+  execute: (slug: string, params: Record<string, any>) =>
+    api.post(`/api/v1/tools/${slug}/execute`, { params }),
   /** Sandbox AI: streaming SSE */
   streamSandbox: (slug: string, message: string, history: Array<{ role: string; content: string }>) => {
     const token = localStorage.getItem('rea_token')
@@ -148,4 +153,5 @@ export const toolsAPI = {
     })
   },
 }
+
 

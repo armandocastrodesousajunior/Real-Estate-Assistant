@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Building2, Users, MessageSquare, Bot, Plus, TrendingUp, ArrowUpRight } from 'lucide-react'
 import { propertiesAPI, leadsAPI, chatAPI, agentsAPI } from '../services/api'
+import AgentIcon from '../components/AgentIcon'
 
 interface Stats { properties: number; leads: number; conversations: number; agents: number }
 
@@ -110,7 +111,7 @@ export default function Dashboard() {
                   onClick={() => navigate('/playground/agents')}
                 >
                   <div className="agent-header">
-                    <div className="agent-emoji">{agent.emoji}</div>
+                    <AgentIcon name={agent.name} emoji={agent.emoji} size="lg" />
                     <div style={{ flex: 1 }}>
                       <div className="agent-name">{agent.name}</div>
                       <div className="agent-slug">{agent.slug}</div>

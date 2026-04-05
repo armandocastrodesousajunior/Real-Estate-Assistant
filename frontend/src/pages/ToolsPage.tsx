@@ -2,15 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Wrench, Plus, Trash2, Link, Link2Off, Search, ShieldCheck, Zap,
   Play, X, Send, RotateCcw, ChevronRight, ChevronDown,
-  Bot, Terminal, Clock, Hash, AlertCircle, Eye, EyeOff, Cpu
+  Bot, Terminal, Clock, Hash, AlertCircle, Eye, EyeOff, Cpu,
+  FlaskConical, CheckCircle2, XCircle
 } from 'lucide-react'
 import { toolsAPI, agentsAPI } from '../services/api'
+import AgentIcon from '../components/AgentIcon'
 
 interface Tool { slug: string; name: string; description: string; prompt: string; type: string; is_active: boolean }
 interface Agent { slug: string; name: string; emoji: string }
 interface SandboxMessage { role: 'user' | 'assistant'; content: string }
 interface SandboxMeta { model: string; injected_prompt_length: number; history_turns: number; system_prompt: string; tool_name: string }
 interface SandboxDone { elapsed_ms: number; approx_tokens: number; response_length: number; model: string }
+interface ParamField { name: string; label: string; type: string; required: boolean; placeholder?: string; options?: string[] }
+interface ManualResult { success: boolean; status_code?: number; elapsed_ms: number; method?: string; url?: string; params_sent?: any; result: any; message?: string }
 
 export default function ToolsPage() {
   const [tools, setTools] = useState<Tool[]>([])
@@ -31,7 +35,13 @@ export default function ToolsPage() {
   const [lastDone, setLastDone] = useState<SandboxDone | null>(null)
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const [showLogsPanel, setShowLogsPanel] = useState(true)
-  const [activeTab, setActiveTab] = useState<'chat' | 'details' | 'agents'>('chat')
+  const [activeTab, setActiveTab] = useState<'chat' | 'manual' | 'details' | 'agents'>('chat')
+
+  // Manual test state
+  const [manualParams, setManualParams] = useState<Record<string, any>>({})
+  const [paramSchema, setParamSchema] = useState<ParamField[]>([])
+  const [manualResult, setManualResult] = useState<ManualResult | null>(null)
+  const [isExecuting, setIsExecuting] = useState(false)
 
   const streamingRef = useRef('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -46,6 +56,16 @@ export default function ToolsPage() {
       setSandboxMeta(null)
       setLastDone(null)
       setShowSystemPrompt(false)
+      setManualResult(null)
+      setManualParams({})
+      // Load schema for manual test
+      toolsAPI.getSchema(selectedTool.slug).then(r => {
+        setParamSchema(r.data.params || [])
+        // Pre-fill defaults
+        const defaults: Record<string, any> = {}
+        r.data.params?.forEach((p: ParamField) => { if (p.options?.length) defaults[p.name] = p.options[0] })
+        setManualParams(defaults)
+      }).catch(() => setParamSchema([]))
       initSandbox(selectedTool)
     }
   }, [selectedTool?.slug])
@@ -149,6 +169,31 @@ export default function ToolsPage() {
     setLastDone(null)
     setStreamingText('')
     if (selectedTool) initSandbox(selectedTool)
+  }
+
+  const executeManual = async () => {
+    if (!selectedTool || isExecuting) return
+    setIsExecuting(true)
+    setManualResult(null)
+    try {
+      // Convert comma-separated property_ids to array
+      const params = { ...manualParams }
+      if (params.property_ids && typeof params.property_ids === 'string') {
+        params.property_ids = params.property_ids.split(',').map((s: string) => Number(s.trim())).filter(Boolean)
+      }
+      // Convert numeric strings
+      Object.keys(params).forEach(k => {
+        if (params[k] !== '' && !isNaN(Number(params[k])) && params[k] !== null && k !== 'session_id' && k !== 'agent_slug' && k !== 'target_agent_slug' && k !== 'code' && k !== 'phone' && k !== 'email' && k !== 'source' && k !== 'name' && k !== 'notes' && k !== 'observation' && k !== 'city' && k !== 'neighborhood' && k !== 'type' && k !== 'status') {
+          if (params[k] !== '') params[k] = Number(params[k])
+        }
+      })
+      const res = await toolsAPI.execute(selectedTool.slug, params)
+      setManualResult(res.data)
+    } catch (e: any) {
+      setManualResult({ success: false, message: e.response?.data?.detail || e.message, elapsed_ms: 0, result: null })
+    } finally {
+      setIsExecuting(false)
+    }
   }
 
   const toggleLink = async (agentSlug: string) => {
@@ -287,8 +332,8 @@ export default function ToolsPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0' }}>
-                {(['chat', 'details', 'agents'] as const).map((tab) => {
-                  const labels = { chat: '🤖 Sandbox IA', details: '📋 Detalhes', agents: '🔗 Agentes' }
+                {(['chat', 'manual', 'details', 'agents'] as const).map((tab) => {
+                  const labels = { chat: '🤖 Sandbox IA', manual: '🧪 Teste Manual', details: '📋 Detalhes', agents: '🔗 Agentes' }
                   return (
                     <button
                       key={tab}
@@ -393,6 +438,123 @@ export default function ToolsPage() {
               </>
             )}
 
+            {/* TAB: Manual Test */}
+            {activeTab === 'manual' && (
+              <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: 'var(--bg-base)' }}>
+                <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+                  <div style={{ marginBottom: '24px' }}>
+                    <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <FlaskConical size={20} style={{ color: 'var(--accent)' }} /> Execução Manual de Ferramenta
+                    </h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                      Preencha os parâmetros abaixo para executar a ferramenta diretamente no sistema, sem intermédio de IA.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: paramSchema.length > 4 ? '1fr 1fr' : '1fr', gap: '20px', marginBottom: '24px' }}>
+                    {paramSchema.length === 0 ? (
+                      <div style={{ padding: '20px', borderRadius: 'var(--radius-md)', background: 'var(--bg-card)', border: '1px solid var(--border)', textAlign: 'center', color: 'var(--text-muted)', gridColumn: '1 / -1' }}>
+                        Esta ferramenta não possui parâmetros definidos para teste manual ou é uma ferramenta externa.
+                      </div>
+                    ) : (
+                      paramSchema.map(field => (
+                        <div key={field.name} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {field.label}
+                          </label>
+                          {field.type === 'select' ? (
+                            <select
+                              className="form-input"
+                              value={manualParams[field.name] || ''}
+                              onChange={e => setManualParams(prev => ({ ...prev, [field.name]: e.target.value }))}
+                              style={{ width: '100%' }}
+                            >
+                              {field.options?.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : field.type === 'textarea' ? (
+                            <textarea
+                              className="form-textarea"
+                              placeholder={field.placeholder}
+                              value={manualParams[field.name] || ''}
+                              onChange={e => setManualParams(prev => ({ ...prev, [field.name]: e.target.value }))}
+                              style={{ minHeight: '80px' }}
+                            />
+                          ) : (
+                            <input
+                              type={field.type === 'number' ? 'number' : 'text'}
+                              className="form-input"
+                              placeholder={field.placeholder}
+                              value={manualParams[field.name] || ''}
+                              onChange={e => setManualParams(prev => ({ ...prev, [field.name]: e.target.value }))}
+                            />
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={executeManual}
+                      disabled={isExecuting || (selectedTool.type === 'external' && paramSchema.length === 0)}
+                      style={{ padding: '10px 24px', fontWeight: 700, gap: '8px' }}
+                    >
+                      {isExecuting ? <RotateCcw size={16} className="spin" /> : <Play size={16} />}
+                      Executar Ferramenta
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => { setManualParams({}); setManualResult(null) }}
+                      style={{ padding: '10px 20px' }}
+                    >
+                      Limpar Campos
+                    </button>
+                  </div>
+
+                  {manualResult && (
+                    <div style={{ animation: 'fadeIn 0.3s ease' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                        {manualResult.success ? (
+                          <CheckCircle2 size={18} style={{ color: 'var(--success)' }} />
+                        ) : (
+                          <XCircle size={18} style={{ color: 'var(--error)' }} />
+                        )}
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: manualResult.success ? 'var(--success)' : 'var(--error)' }}>
+                          {manualResult.success ? 'Executado com Sucesso' : 'Falha na Execução'}
+                        </span>
+                        <div style={{ flex: 1 }} />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Status: <strong style={{ color: 'var(--text-primary)' }}>{manualResult.status_code || 'N/A'}</strong> |
+                          Tempo: <strong style={{ color: 'var(--text-primary)' }}>{manualResult.elapsed_ms}ms</strong>
+                        </span>
+                      </div>
+
+                      <div style={{ background: 'var(--bg-card)', border: `1px solid ${manualResult.success ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                            {manualResult.method} {manualResult.url}
+                          </span>
+                        </div>
+                        <div style={{ padding: '16px', maxHeight: '400px', overflowY: 'auto' }}>
+                          {manualResult.message && (
+                            <div style={{ color: 'var(--error)', fontSize: '0.85rem', marginBottom: '12px', padding: '10px', borderRadius: '4px', background: 'var(--error-dim)' }}>
+                              {manualResult.message}
+                            </div>
+                          )}
+                          <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
+                            {JSON.stringify(manualResult.result, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* TAB: Details */}
             {activeTab === 'details' && (
               <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
@@ -491,7 +653,7 @@ export default function ToolsPage() {
                     return (
                       <div key={a.slug} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 'var(--radius-lg)', border: `1px solid ${isLinked ? 'rgba(16,185,129,0.3)' : 'var(--border)'}`, background: isLinked ? 'var(--accent-dim)' : 'var(--bg-card)', transition: 'var(--transition)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', border: '1px solid var(--border)' }}>{a.emoji}</div>
+                          <AgentIcon name={a.name} emoji={a.emoji} />
                           <div>
                             <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{a.name}</div>
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{a.slug}</div>

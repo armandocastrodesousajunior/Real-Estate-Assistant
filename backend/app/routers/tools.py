@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import json, time, uuid
 
 from app.core.database import get_db
@@ -13,6 +13,97 @@ from app.agents.openrouter import openrouter
 from app.core.config import settings
 
 router = APIRouter()
+
+# ─── Schema de parâmetros para cada ferramenta interna ────────────────────────
+# Define os campos que o formulário manual vai mostrar
+TOOL_PARAMS_SCHEMA: Dict[str, List[Dict[str, Any]]] = {
+    "consultar_lead": [
+        {"name": "id", "label": "ID do Lead", "type": "number", "required": False, "placeholder": "ex: 42"},
+        {"name": "email", "label": "E-mail", "type": "email", "required": False, "placeholder": "ex: cliente@email.com"},
+        {"name": "phone", "label": "Telefone", "type": "text", "required": False, "placeholder": "ex: 11999999999"},
+    ],
+    "criar_lead": [
+        {"name": "name", "label": "Nome *", "type": "text", "required": True, "placeholder": "Nome completo"},
+        {"name": "email", "label": "E-mail", "type": "email", "required": False, "placeholder": "ex: cliente@email.com"},
+        {"name": "phone", "label": "Telefone", "type": "text", "required": False, "placeholder": "ex: 11999999999"},
+        {"name": "source", "label": "Origem", "type": "select", "required": False, "options": ["website", "chat_ia", "whatsapp", "telefone", "indicacao", "portal_imovel", "redes_sociais", "outro"]},
+        {"name": "status", "label": "Status", "type": "select", "required": False, "options": ["novo", "contatado", "qualificado", "proposta", "negociando", "fechado_ganho", "fechado_perdido"]},
+        {"name": "notes", "label": "Observações", "type": "textarea", "required": False, "placeholder": "Notas sobre o lead..."},
+        {"name": "desired_city", "label": "Cidade desejada", "type": "text", "required": False},
+        {"name": "max_price", "label": "Orçamento máx. (R$)", "type": "number", "required": False},
+    ],
+    "editar_lead": [
+        {"name": "id", "label": "ID do Lead *", "type": "number", "required": True},
+        {"name": "name", "label": "Nome", "type": "text", "required": False},
+        {"name": "email", "label": "E-mail", "type": "email", "required": False},
+        {"name": "phone", "label": "Telefone", "type": "text", "required": False},
+        {"name": "status", "label": "Status", "type": "select", "required": False, "options": ["novo", "contatado", "qualificado", "proposta", "negociando", "fechado_ganho", "fechado_perdido"]},
+        {"name": "notes", "label": "Observações", "type": "textarea", "required": False},
+    ],
+    "deletar_lead": [
+        {"name": "id", "label": "ID do Lead *", "type": "number", "required": True, "placeholder": "ex: 42"},
+    ],
+    "listar_leads": [
+        {"name": "status", "label": "Status (filtro)", "type": "select", "required": False, "options": ["", "novo", "contatado", "qualificado", "proposta", "negociando", "fechado_ganho", "fechado_perdido"]},
+        {"name": "source", "label": "Origem (filtro)", "type": "select", "required": False, "options": ["", "website", "chat_ia", "whatsapp", "telefone", "indicacao", "portal_imovel", "redes_sociais", "outro"]},
+        {"name": "page", "label": "Página", "type": "number", "required": False, "placeholder": "1"},
+        {"name": "page_size", "label": "Itens por página", "type": "number", "required": False, "placeholder": "10"},
+    ],
+    "mover_lead_funil": [
+        {"name": "id", "label": "ID do Lead *", "type": "number", "required": True},
+        {"name": "status", "label": "Novo Status *", "type": "select", "required": True, "options": ["novo", "contatado", "qualificado", "proposta", "negociando", "fechado_ganho", "fechado_perdido"]},
+    ],
+    "adicionar_obs_lead": [
+        {"name": "id", "label": "ID do Lead *", "type": "number", "required": True},
+        {"name": "observation", "label": "Observação *", "type": "textarea", "required": True, "placeholder": "Texto da observação..."},
+    ],
+    "consultar_sessao": [
+        {"name": "session_id", "label": "Session ID *", "type": "text", "required": True, "placeholder": "uuid da sessão"},
+    ],
+    "listar_sessoes": [
+        {"name": "agent_slug", "label": "Slug do Agente", "type": "text", "required": False},
+        {"name": "status", "label": "Status", "type": "select", "required": False, "options": ["", "open", "closed", "pending"]},
+        {"name": "limit", "label": "Limite", "type": "number", "required": False, "placeholder": "20"},
+    ],
+    "alterar_status_sessao": [
+        {"name": "session_id", "label": "Session ID *", "type": "text", "required": True},
+        {"name": "status", "label": "Novo Status *", "type": "select", "required": True, "options": ["open", "closed", "pending"]},
+    ],
+    "encerrar_sessao": [
+        {"name": "session_id", "label": "Session ID *", "type": "text", "required": True},
+    ],
+    "transferir_sessao": [
+        {"name": "session_id", "label": "Session ID *", "type": "text", "required": True},
+        {"name": "target_agent_slug", "label": "Agente de Destino *", "type": "text", "required": True, "placeholder": "slug do agente"},
+    ],
+    "consultar_imovel": [
+        {"name": "id", "label": "ID do Imóvel", "type": "number", "required": False},
+        {"name": "code", "label": "Código de Referência", "type": "text", "required": False},
+    ],
+    "listar_imoveis": [
+        {"name": "type", "label": "Tipo", "type": "select", "required": False, "options": ["", "apartamento", "casa", "comercial", "terreno", "rural", "kitnet_studio"]},
+        {"name": "min_price", "label": "Preço mínimo (R$)", "type": "number", "required": False},
+        {"name": "max_price", "label": "Preço máximo (R$)", "type": "number", "required": False},
+        {"name": "city", "label": "Cidade", "type": "text", "required": False},
+        {"name": "neighborhood", "label": "Bairro", "type": "text", "required": False},
+        {"name": "bedrooms", "label": "Quartos (mín.)", "type": "number", "required": False},
+        {"name": "page_size", "label": "Qtd resultados", "type": "number", "required": False, "placeholder": "10"},
+    ],
+    "consultar_disponibilidade": [
+        {"name": "id", "label": "ID do Imóvel *", "type": "number", "required": True},
+    ],
+    "buscar_imoveis_perfil": [
+        {"name": "budget", "label": "Orçamento (R$)", "type": "number", "required": False},
+        {"name": "city", "label": "Cidade", "type": "text", "required": False},
+        {"name": "type", "label": "Tipo", "type": "select", "required": False, "options": ["", "apartamento", "casa", "comercial", "terreno"]},
+        {"name": "bedrooms", "label": "Quartos", "type": "number", "required": False},
+        {"name": "min_area", "label": "Área mínima (m²)", "type": "number", "required": False},
+    ],
+    "vincular_imovel_lead": [
+        {"name": "lead_id", "label": "ID do Lead *", "type": "number", "required": True},
+        {"name": "property_ids", "label": "IDs dos Imóveis * (separados por vírgula)", "type": "text", "required": True, "placeholder": "ex: 1,2,3"},
+    ],
+}
 
 SANDBOX_SYSTEM_PROMPT = """Você é o **RealtyAI Tool Sandbox** — um assistente especializado em testar e demonstrar ferramentas de forma interativa.
 
@@ -102,6 +193,148 @@ async def delete_tool(slug: str, db: AsyncSession = Depends(get_db)):
     await db.delete(tool)
     await db.commit()
     return {"status": "ok"}
+
+
+# ─── SCHEMA endpoint: retorna os campos do formulário manual ──────────────────
+
+@router.get("/{slug}/schema")
+async def get_tool_schema(slug: str):
+    """Retorna o schema de parâmetros para a ferramenta, usado para montar o formulário manual."""
+    params = TOOL_PARAMS_SCHEMA.get(slug, [])
+    return {
+        "slug": slug,
+        "has_schema": len(params) > 0,
+        "params": params,
+    }
+
+
+# ─── EXECUTE endpoint: executa ferramenta interna com parâmetros reais ────────
+
+from pydantic import BaseModel as PydanticBase
+
+class ManualExecuteRequest(PydanticBase):
+    params: Dict[str, Any] = {}
+
+
+@router.post("/{slug}/execute")
+async def execute_tool(slug: str, req: ManualExecuteRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Executa uma ferramenta interna diretamente com parâmetros fornecidos manualmente.
+    Mapeia o slug para o endpoint real do sistema e retorna o resultado.
+    """
+    import httpx
+    from app.core.config import settings
+
+    start = time.time()
+    params = {k: v for k, v in req.params.items() if v is not None and v != ""}
+
+    # Monta a requisição HTTP interna para o endpoint real do sistema
+    base = "http://localhost:8000/api/v1"
+    token = None  # execução interna — sem auth necessária para operações de leitura
+
+    # Mapa: slug → (method, url_template, body_or_params)
+    TOOL_ROUTES = {
+        # LEADS
+        "listar_leads":       ("GET",  f"{base}/leads/",     "params"),
+        "consultar_lead":     ("GET",  f"{base}/leads/{{id}}", "path_or_query"),
+        "criar_lead":         ("POST", f"{base}/leads/",     "body"),
+        "editar_lead":        ("PUT",  f"{base}/leads/{{id}}", "body_with_id"),
+        "deletar_lead":       ("DELETE", f"{base}/leads/{{id}}", "path"),
+        "mover_lead_funil":   ("PUT",  f"{base}/leads/{{id}}", "body_with_id"),
+        "adicionar_obs_lead": ("PUT",  f"{base}/leads/{{id}}", "body_with_id"),
+        # PROPERTIES
+        "listar_imoveis":          ("GET",  f"{base}/properties/", "params"),
+        "consultar_imovel":        ("GET",  f"{base}/properties/{{id}}", "path_or_query"),
+        "consultar_disponibilidade": ("GET", f"{base}/properties/{{id}}", "path"),
+        "buscar_imoveis_perfil":   ("GET",  f"{base}/properties/", "params"),
+        # SESSIONS / CONVERSATIONS
+        "consultar_sessao":    ("GET",  f"{base}/chat/conversations/{{session_id}}", "path"),
+        "listar_sessoes":      ("GET",  f"{base}/chat/conversations", "params"),
+        "alterar_status_sessao": ("PATCH", f"{base}/chat/conversations/{{session_id}}", "body_with_path"),
+        "encerrar_sessao":     ("DELETE", f"{base}/chat/conversations/{{session_id}}", "path"),
+        "transferir_sessao":   ("PATCH", f"{base}/chat/conversations/{{session_id}}", "body_with_path"),
+    }
+
+    if slug not in TOOL_ROUTES:
+        # Ferramenta externa: sem execução real possível
+        elapsed = int((time.time() - start) * 1000)
+        return {
+            "success": False,
+            "message": "Esta é uma ferramenta externa — não possui execução direta. Use o Sandbox IA para testar.",
+            "elapsed_ms": elapsed,
+            "params_sent": params,
+            "result": None,
+        }
+
+    method, url_template, mode = TOOL_ROUTES[slug]
+
+    try:
+        # Resolve URL com path params
+        url = url_template
+        body = {}
+        query_params = {}
+
+        if "{id}" in url:
+            if "id" in params:
+                url = url.replace("{id}", str(params.pop("id")))
+            else:
+                return {"success": False, "message": "Parâmetro 'id' é obrigatório.", "result": None, "elapsed_ms": 0}
+
+        if "{session_id}" in url:
+            if "session_id" in params:
+                url = url.replace("{session_id}", str(params.pop("session_id")))
+            else:
+                return {"success": False, "message": "Parâmetro 'session_id' é obrigatório.", "result": None, "elapsed_ms": 0}
+
+        if mode in ("params", "path_or_query"):
+            query_params = {k: v for k, v in params.items() if v}
+        elif mode in ("body", "body_with_id", "body_with_path"):
+            body = params
+
+        # Busca um token de admin do sistema para auth
+        from app.core.security import create_access_token
+        internal_token = create_access_token({"sub": "admin@realestateassistant.com"})
+        headers = {"Authorization": f"Bearer {internal_token}", "Content-Type": "application/json"}
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            if method == "GET":
+                response = await client.get(url, params=query_params, headers=headers)
+            elif method == "POST":
+                response = await client.post(url, json=body, headers=headers)
+            elif method == "PUT":
+                response = await client.put(url, json=body, headers=headers)
+            elif method == "PATCH":
+                response = await client.patch(url, json=body, headers=headers)
+            elif method == "DELETE":
+                response = await client.delete(url, headers=headers)
+            else:
+                response = None
+
+        elapsed = int((time.time() - start) * 1000)
+
+        try:
+            result_data = response.json()
+        except Exception:
+            result_data = response.text
+
+        return {
+            "success": response.status_code < 400,
+            "status_code": response.status_code,
+            "elapsed_ms": elapsed,
+            "method": method,
+            "url": url,
+            "params_sent": {**query_params, **body},
+            "result": result_data,
+        }
+
+    except Exception as e:
+        elapsed = int((time.time() - start) * 1000)
+        return {
+            "success": False,
+            "message": str(e),
+            "elapsed_ms": elapsed,
+            "result": None,
+        }
 
 
 # ─── SANDBOX ENDPOINT ────────────────────────────────────────────────────────
