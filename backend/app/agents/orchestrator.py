@@ -145,13 +145,18 @@ Qual agente deve responder?"""
         try:
             data = json.loads(clean_json)
         except json.JSONDecodeError:
-            # Fallback se o JSON falhar mas o slug estiver na string
-            logger.warning(f"Falha ao decodificar JSON do Supervisor. Tentando extrair slug da string bruta.")
-            data = {"selected_agent": "customer_service", "reason": "Erro no parse JSON"}
-            for s in slugs:
-                if s in clean_json.lower():
-                    data["selected_agent"] = s
-                    break
+            # TENTA REPARO AUTOMÁTICO DO SUPERVISOR
+            logger.warning(f"Falha ao decodificar JSON do Supervisor. Tentando reparo interno.")
+            try:
+                repaired_data = await repair_agent_output(clean_json, repair_type="supervisor")
+                data = repaired_data
+            except:
+                # Fallback se o reparo falhar mas o slug estiver na string
+                data = {"selected_agent": "agente_atendimento_inicial", "reason": "Erro no parse JSON e Reparo"}
+                for s in slugs:
+                    if s in clean_json.lower():
+                        data["selected_agent"] = s
+                        break
 
         slug = data.get("selected_agent", "customer_service").lower().strip()
         
@@ -172,6 +177,38 @@ Qual agente deve responder?"""
     except Exception as e:
         logger.warning(f"Supervisor routing failed: {e}. Defaulting to customer_service.")
         return fallback
+
+async def repair_agent_output(broken_content: str, repair_type: str = "expert") -> Dict:
+    """Usa uma IA secundária para envolpar um texto puro no formato JSON exigido (expert ou supervisor)"""
+    logger.info(f"Iniciando reparo de JSON tipo '{repair_type}' para conteúdo malformado.")
+    
+    prompt_file = f"repair_response_{repair_type}.md"
+    system_repair = get_internal_prompt(prompt_file)
+    
+    if not system_repair:
+        # Fallback de emergência se o arquivo de prompt sumir
+        if repair_type == "supervisor":
+             return {"selected_agent": "agente_atendimento_inicial", "reason": "Erro no reparo"}
+        return {"type": "response", "response": {"output": broken_content}}
+
+    try:
+        raw_repair = await openrouter.simple_complete(
+            system_prompt=system_repair,
+            user_message=f"CONTEÚDO PARA REPARAR:\n---\n{broken_content}\n---",
+            model=settings.SUPERVISOR_MODEL,
+            temperature=0.1,
+            max_tokens=1000
+        )
+        
+        # Limpar markdown do reparo
+        clean_repair = re.sub(r'```json\s*|\s*```', '', raw_repair).strip()
+        data = json.loads(clean_repair)
+        return data
+    except Exception as e:
+        logger.error(f"Falha crítica no reparo de JSON ({repair_type}): {e}")
+        if repair_type == "supervisor":
+             return {"selected_agent": "agente_atendimento_inicial", "reason": f"Erro crítico: {e}"}
+        return {"type": "response", "response": {"output": broken_content}}
 
 
 class AgentRedirectSignal(Exception):
@@ -398,7 +435,26 @@ async def run_agent_stream(
                 raise
             except Exception as e:
                 logger.error(f"Failed to extract slug from JSON: {buffer} -> {e}")
-                yield f"\n\n⚠️ Erro ao rotear agente (JSON). {str(e)}"
+                
+                # TENTA REPARO SE FALHAR O REDIRECIONAMENTO COMUM
+                try:
+                    repaired = await repair_agent_output(buffer)
+                    if repaired.get("type") == "redirect":
+                        rd = repaired.get("redirect", {})
+                        raise AgentRedirectSignal(rd.get("slug"), rd.get("reason"), raw_response=buffer)
+                    else:
+                        yield repaired.get("response", {}).get("output", "Houve um erro no processamento da resposta.")
+                except AgentRedirectSignal:
+                    raise
+                except:
+                    yield f"\n\n⚠️ Erro ao rotear agente (JSON). {str(e)}"
+        
+        # SE O STREAM TERMINOU E NÃO ENTROU EM ESTADO DE RESPOSTA OU REDIRECIONAMENTO VÁLIDO
+        # OU SE O BUFFER AINDA TEM CONTEÚDO QUE NÃO FOI 'YIELDADO'
+        if not is_redirect and (state == 0 or state == 1):
+             # O Agente apenas falou texto puro ou quebrou o JSON
+             repaired = await repair_agent_output(buffer)
+             yield repaired.get("response", {}).get("output", buffer)
 
         # Atualiza estatísticas do agente
         elapsed_ms = (time.time() - start) * 1000
@@ -477,14 +533,31 @@ async def run_agent_complete(
             temperature=agent.temperature,
             max_tokens=agent.max_tokens,
         )
-        content = result["choices"][0]["message"]["content"]
-        tokens = result.get("usage", {}).get("total_tokens", 0)
+        # Tenta Parsear o JSON da resposta completa
+        try:
+            content = result["choices"][0]["message"]["content"]
+            tokens = result.get("usage", {}).get("total_tokens", 0)
+            
+            # Limpa markdown
+            clean_content = re.sub(r'```json\s*|\s*```', '', content).strip()
+            data = json.loads(clean_content)
+            
+            # Se for resposta direta, extrai o output
+            if data.get("type") == "response":
+                final_content = data.get("response", {}).get("output", content)
+            else:
+                # Se for outro tipo (redirect) no modo completo, apenas logamos por enquanto
+                final_content = content
+        except:
+            # Se o JSON falhar, tenta o reparador interno
+            repaired = await repair_agent_output(content)
+            final_content = repaired.get("response", {}).get("output", content)
 
         agent.total_calls += 1
         agent.total_tokens_used += tokens
         await db.commit()
 
-        return {"content": content, "tokens": tokens, "model": agent.model}
+        return {"content": final_content, "tokens": tokens, "model": agent.model}
     except Exception as e:
         logger.error(f"Agent {agent_slug} complete error: {e}")
         return {"content": f"Erro: {str(e)}", "tokens": 0, "model": agent.model}
