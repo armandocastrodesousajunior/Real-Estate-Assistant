@@ -11,12 +11,7 @@ interface Message { role: string; content: string; agentSlug?: string; agentName
 interface Conversation { id: number; session_id: string; title?: string; message_count: number; updated_at: string }
 interface Agent { slug: string; name: string; emoji: string; color: string; description: string; model: string; temperature: number; max_tokens: number; is_active: boolean; is_system: boolean }
 
-const MODELS_COMMON = [
-  'openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo',
-  'anthropic/claude-3.5-sonnet', 'anthropic/claude-3-haiku',
-  'google/gemini-pro-1.5', 'mistralai/mistral-large',
-  'meta-llama/llama-3.1-70b-instruct',
-]
+
 
 export default function Playground() {
   const [agents, setAgents] = useState<Agent[]>([])
@@ -44,6 +39,9 @@ export default function Playground() {
   const [agentToolsSlugs, setAgentToolsSlugs] = useState<string[]>([])
   const [toolSearchTerm, setToolSearchTerm] = useState('')
   const [isToolDropdownOpen, setIsToolDropdownOpen] = useState(false)
+  const [openRouterModels, setOpenRouterModels] = useState<any[]>([])
+  const [modelSearchTerm, setModelSearchTerm] = useState('')
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
 
   const streamingTextRef = useRef('')
   const streamingAgentRef = useRef<{ name: string; emoji: string } | null>(null)
@@ -139,6 +137,13 @@ export default function Playground() {
       const [allToolsRes, agentToolsRes] = await Promise.all([toolsAPI.list(), toolsAPI.listAgentTools(slug)])
       setAllTools(allToolsRes.data); setAgentToolsSlugs(agentToolsRes.data)
     } catch {}
+  }
+
+  const loadOpenRouterModels = async () => {
+    try {
+      const { data } = await agentsAPI.getModels()
+      setOpenRouterModels(data.models || [])
+    } catch { console.error('Erro ao listar modelos OpenRouter.') }
   }
 
   const toggleToolLink = async (toolSlug: string) => {
@@ -416,9 +421,45 @@ export default function Playground() {
 
             <div className="config-section">
               <div className="config-label">Modelo LLM</div>
-              <select className="form-select" value={editedParams.model} onChange={(e) => { setEditedParams({ ...editedParams, model: e.target.value }); setHasUnsavedChanges(true) }}>
-                {MODELS_COMMON.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-elevated)', border: `1px solid ${isModelDropdownOpen ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--radius-md)', padding: '8px 12px', cursor: 'pointer', transition: 'var(--transition)', fontSize: '0.8rem', color: 'var(--text-primary)' }}
+                  onClick={() => { setIsModelDropdownOpen(!isModelDropdownOpen); if (!openRouterModels.length) loadOpenRouterModels(); }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editedParams.model || 'Selecione um modelo'}</span>
+                  <ChevronRight size={14} style={{ transform: isModelDropdownOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'var(--transition)' }} />
+                </div>
+                {isModelDropdownOpen && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', zIndex: 60, overflow: 'hidden' }}>
+                    <div style={{ padding: '8px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)' }}>
+                      <SearchIcon size={13} style={{ color: 'var(--text-muted)' }} />
+                      <input autoFocus type="text" placeholder="Pesquisar modelos (ex: claude, gpt)..." style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '0.78rem', color: 'var(--text-primary)', width: '100%' }} value={modelSearchTerm} onChange={e => setModelSearchTerm(e.target.value)} onClick={e => e.stopPropagation()} />
+                    </div>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '4px' }}>
+                      {openRouterModels.length === 0 ? (
+                        <div style={{ padding: '12px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Carregando modelos...
+                        </div>
+                      ) : (
+                        openRouterModels.filter(m => m.id.toLowerCase().includes(modelSearchTerm.toLowerCase()) || (m.name && m.name.toLowerCase().includes(modelSearchTerm.toLowerCase()))).slice(0, 50).map(model => (
+                          <div key={model.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'var(--transition)', background: editedParams.model === model.id ? 'var(--primary-dim)' : 'transparent' }}
+                            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = editedParams.model === model.id ? 'var(--primary-dim)' : 'var(--bg-elevated)'}
+                            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = editedParams.model === model.id ? 'var(--primary-dim)' : 'transparent'}
+                            onClick={(e) => { e.stopPropagation(); setEditedParams({ ...editedParams, model: model.id }); setHasUnsavedChanges(true); setIsModelDropdownOpen(false); setModelSearchTerm(''); }}>
+                            <div style={{ overflow: 'hidden' }}>
+                              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: editedParams.model === model.id ? 'var(--primary)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{model.name || model.id}</div>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', display: 'flex', gap: '8px' }}>
+                                <span>{model.id}</span>
+                                {model.context_length && <span style={{ color: 'var(--accent)' }}>{(model.context_length / 1000).toFixed(0)}k ctx</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="config-section">
