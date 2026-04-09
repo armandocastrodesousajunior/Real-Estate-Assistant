@@ -198,8 +198,10 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                         )
                     res_data = t_res.json()
                     res_str = json.dumps(res_data.get("result", res_data), ensure_ascii=False)
+                    step_log["tool_result"] = res_data.get("result", res_data)
                 except Exception as e:
                     res_str = f"Erro interno ao executar a ferramenta: {str(e)}"
+                    step_log["tool_result"] = {"error": str(e)}
                 
                 # Alimenta o LLM de volta com a resposta real do backend
                 current_redirect_context = f"⚠️ [ATENÇÃO DO SISTEMA]\nVocê acabou de solicitar a execução da ferramenta '{tool_req.tool_name}'.\n\n**DADOS RETORNADOS DA FERRAMENTA:**\n```json\n{res_str}\n```\n\nAnalise detalhadamente as informações e responda ao usuário (sem usar a mesma ferramenta repetidamente caso ela já tenha retornado os dados necessários)."

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, ArrowRight, User, Bot, Search, Code, List, ChevronDown, ChevronRight, MessageSquare, Terminal, FileText, Copy, Check, Wrench } from 'lucide-react'
+import { X, ArrowRight, User, Bot, Search, Code, List, ChevronDown, ChevronRight, MessageSquare, Terminal, FileText, Copy, Check, Wrench, Activity } from 'lucide-react'
 
 interface TraceCall {
   agent_slug: string
@@ -13,6 +13,7 @@ interface TraceCall {
     name: string
     arguments: any
   }
+  tool_result?: any
 }
 
 interface TraceModalProps {
@@ -102,6 +103,17 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
               <p className="text-xs text-gray-300 font-mono mt-2" style={{ whiteSpace: 'pre-wrap', maxHeight: '150px', overflowY: 'auto' }}>
                 {JSON.stringify(call.tool_call.arguments, null, 2)}
               </p>
+
+              {call.tool_result && (
+                <div className="mt-4 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div className="text-xs uppercase font-bold mb-1 tracking-wider flex items-center gap-2" style={{ color: 'var(--success)' }}>
+                    <Activity size={14} /> DADOS RETORNADOS PELA FERRAMENTA
+                  </div>
+                  <div className="text-xs text-gray-300 font-mono mt-2" style={{ whiteSpace: 'pre-wrap', maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '4px', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    {JSON.stringify(call.tool_result, null, 2)}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
