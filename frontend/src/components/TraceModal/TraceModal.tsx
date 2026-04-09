@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, ArrowRight, User, Bot, Search, Code, List, ChevronDown, ChevronRight, MessageSquare, Terminal, FileText, Copy, Check } from 'lucide-react'
+import { X, ArrowRight, User, Bot, Search, Code, List, ChevronDown, ChevronRight, MessageSquare, Terminal, FileText, Copy, Check, Wrench } from 'lucide-react'
 
 interface TraceCall {
   agent_slug: string
@@ -9,6 +9,10 @@ interface TraceCall {
   system_prompt?: string
   messages_sent?: any[]
   raw_ai_output?: string
+  tool_call?: {
+    name: string
+    arguments: any
+  }
 }
 
 interface TraceModalProps {
@@ -62,7 +66,12 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
         <div style={{ padding: '16px', cursor: 'pointer' }} onClick={() => setExpanded(!expanded)}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div className="text-xs text-muted font-mono mb-1">Passo {stepNumber} • {call.success ? 'Resposta Final' : 'Avaliação e Handoff'}</div>
+              <div className="text-xs text-muted font-mono mb-1">
+                Passo {stepNumber} • {
+                  call.tool_call ? 'Chamada de Ferramenta (Tool Call)' :
+                  call.success ? 'Resposta Final' : 'Avaliação e Handoff'
+                }
+              </div>
               <div className="font-semibold text-white flex items-center gap-2">
                 Agente: <span className={call.success ? '' : 'text-gray-400'}>{call.agent_slug}</span>
               </div>
@@ -85,7 +94,18 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
              </div>
           )}
 
-          {call.success && (
+          {call.tool_call && (
+            <div className="mt-3 p-3 rounded" style={{ background: 'rgba(255,255,255,0.05)', borderLeft: '3px solid var(--primary)' }}>
+              <div className="text-xs text-muted uppercase font-bold mb-1 tracking-wider flex items-center gap-2">
+                <Wrench size={14} /> FERRAMENTA EXECUTADA: {call.tool_call.name}
+              </div>
+              <p className="text-xs text-gray-300 font-mono mt-2" style={{ whiteSpace: 'pre-wrap', maxHeight: '150px', overflowY: 'auto' }}>
+                {JSON.stringify(call.tool_call.arguments, null, 2)}
+              </p>
+            </div>
+          )}
+
+          {call.success && !call.tool_call && (
             <p className="text-sm text-muted mt-2" style={{ lineHeight: 1.5 }}>
               Assumiu o escopo da solicitação de forma bem sucedida.
             </p>
