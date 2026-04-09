@@ -112,6 +112,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         max_redirects = settings.MAX_AGENT_HOPS
         current_redirect = 0
         response_text = ""
+        current_redirect_context = None
 
         while True:
             # Evento inicial de seleção do agente
@@ -120,8 +121,8 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             step_log = {}
             full_response = []
             try:
-                # Inicia o stream no agente atual, passando o tracer
-                async for chunk in run_agent_stream(db, agent_slug, request.message, history, trace_log=step_log):
+                # Inicia o stream no agente atual, passando o tracer e possível contexto de redirecionamento
+                async for chunk in run_agent_stream(db, agent_slug, request.message, history, context=current_redirect_context, trace_log=step_log):
                     full_response.append(chunk)
                     yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
                 
@@ -164,6 +165,10 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 agent_name = agent.name if agent else agent_slug
                 agent_emoji = agent.emoji if agent else "🤖"
                 agent_color = agent.color if agent else "#F59E0B"
+                
+                # Monta o contexto para o próximo agente (o alvo do redirecionamento)
+                current_redirect_context = f"⚠️ [ATENÇÃO DO SISTEMA]\nVocê está recebendo este usuário após um roteamento/redirecionamento disparado pelo agente '{old_slug}'.\nO agente anterior informou a seguinte justificativa para te chamar: \"{target_slug_reason}\"\n\nAssuma o atendimento a partir daqui para sanar a dor apontada!"
+                
                 # O laço recomeça enviando um novo agent_selected e iterando!
 
         trace_log["final_agent"] = agent_slug
