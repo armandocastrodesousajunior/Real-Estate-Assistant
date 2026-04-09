@@ -208,7 +208,12 @@ export default function Playground() {
         </div>
 
         <div className="playground-sidebar-section">
-          <div className="section-header"><Bot size={14} /><span>Especialistas</span></div>
+          <div className="section-header">
+            <Bot size={14} /><span>Especialistas</span>
+            <button className="btn-icon-sm" onClick={() => setIsCreateModalOpen(true)} title="Criar Novo Agente">
+              <Plus size={14} />
+            </button>
+          </div>
           <div className="agents-list">
             {agents.map(a => (
               <div
@@ -257,11 +262,6 @@ export default function Playground() {
           </div>
         </div>
 
-        <div style={{ padding: '12px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
-          <button className="btn btn-secondary w-full gap-2" style={{ justifyContent: 'center', borderStyle: 'dashed' }} onClick={() => setIsCreateModalOpen(true)}>
-            <Plus size={14} /> Novo Agente
-          </button>
-        </div>
       </div>
 
       {/* C2: Chat */}
