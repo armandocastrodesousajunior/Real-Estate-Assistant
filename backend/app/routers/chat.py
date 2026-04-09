@@ -113,8 +113,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         current_redirect = 0
         response_text = ""
         current_redirect_context = None
+        trip_count = 0
 
         while True:
+            trip_count += 1
+            print(f"\n{'='*20} TRIP #{trip_count} {'='*20}")
+            print(f"[AGENT] Ativo: {agent_slug} ({agent_name})")
             # Evento inicial de seleção do agente
             yield f'data: {json.dumps({"type": "agent_selected", "agent_slug": agent_slug, "agent_name": agent_name, "agent_emoji": agent_emoji, "agent_color": agent_color, "session_id": conv.session_id})}\n\n'
 
@@ -160,7 +164,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 current_redirect += 1
 
                 # Informa no log e recarrega as configs do novo agente
-                print(f"[RE-ROUTE] Agente {old_slug} recusou e roteou para: {agent_slug}")
+                print(f"[RE-ROUTE] Da: {old_slug} Para: {agent_slug} | Motivo: {target_slug_reason}")
                 agent = await get_agent_config(db, agent_slug)
                 agent_name = agent.name if agent else agent_slug
                 agent_emoji = agent.emoji if agent else "🤖"
@@ -178,6 +182,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 }
                 step_log["raw_ai_output"] = tool_req.raw_response
                 trace_log["calls"].append(step_log)
+                print(f"[TOOL CALL] Tool: {tool_req.tool_name} | Args: {tool_req.arguments}")
 
                 # Salva o texto que foi gerado até agora, se houver
                 response_text += "".join(full_response)
@@ -202,6 +207,9 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 except Exception as e:
                     res_str = f"Erro interno ao executar a ferramenta: {str(e)}"
                     step_log["tool_result"] = {"error": str(e)}
+                
+                print(f"[TOOL RESULT] Status: {t_res.status_code if 't_res' in locals() else 'ERROR'} | Time: {int((time.time() - start_time)*1000) if 'start_time' in locals() else '??'}ms")
+                print(f"{'-'*50}")
                 
                 # Alimenta o LLM de volta com a resposta real do backend
                 current_redirect_context = f"⚠️ [ATENÇÃO DO SISTEMA]\nVocê acabou de solicitar a execução da ferramenta '{tool_req.tool_name}'.\n\n**DADOS RETORNADOS DA FERRAMENTA:**\n```json\n{res_str}\n```\n\nAnalise detalhadamente as informações e responda ao usuário (sem usar a mesma ferramenta repetidamente caso ela já tenha retornado os dados necessários)."

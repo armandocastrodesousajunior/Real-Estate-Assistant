@@ -374,6 +374,7 @@ async def run_agent_stream(
         trace_log["messages_sent"] = messages
         trace_log["raw_ai_output"] = ""
     
+    print(f"   ↳ [AI START] Gerando resposta com modelo: {agent.model}...")
     start = time.time()
     try:
         buffer = ""
