@@ -41,7 +41,10 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
 
   const formatMessages = (messages: any[]) => {
     if (!messages || !Array.isArray(messages)) return 'Nenhum contexto de mensagens disponível.';
-    return messages.map(m => `[${m.role.toUpperCase()}]\n${m.content}`).join('\n\n');
+    return messages
+      .filter(m => m.role !== 'system')
+      .map(m => `[${m.role.toUpperCase()}]\n${m.content}`)
+      .join('\n\n');
   }
 
   return (
