@@ -36,7 +36,7 @@ INTERNAL_TOOLS = {
             "slug": "mover_lead_funil",
             "name": "Mover Lead no Funil",
             "description": "Altera o estágio do lead dentro do funil de vendas (ex: contato -> qualificado -> proposta -> fechado).",
-            "prompt": "Informe o 'id' do lead e o novo 'status'."
+            "prompt": "Informe o 'id' do lead e o novo 'status' (OBRIGATÓRIO ser minúsculo: 'novo', 'contatado', 'qualificado', 'proposta', 'negociando', 'fechado_ganho' ou 'fechado_perdido')."
         },
         {
             "slug": "adicionar_obs_lead",
@@ -62,7 +62,7 @@ INTERNAL_TOOLS = {
             "slug": "alterar_status_sessao",
             "name": "Alterar Status da Sessão",
             "description": "Atualiza a coluna status na tabela de sessões para open, closed ou pending.",
-            "prompt": "Informe 'session_id' e o novo 'status'."
+            "prompt": "Informe 'session_id' e o novo 'status' (OBRIGATÓRIO ser minúsculo: 'open', 'closed' ou 'pending')."
         },
         {
             "slug": "encerrar_sessao",
@@ -88,7 +88,7 @@ INTERNAL_TOOLS = {
             "slug": "listar_imoveis",
             "name": "Listar Imóveis",
             "description": "Retorna imóveis com filtros por tipo, faixa de preço, localização, área e disponibilidade.",
-            "prompt": "Filtros: 'type', 'min_price', 'max_price', 'city', 'neighborhood'."
+            "prompt": "Filtros: 'type' (OBRIGATÓRIO letras minúsculas: 'apartamento', 'casa', 'comercial', 'terreno', 'rural' ou 'kitnet_studio'), 'min_price', 'max_price', 'city', 'neighborhood'."
         },
         {
             "slug": "consultar_disponibilidade",
@@ -100,7 +100,7 @@ INTERNAL_TOOLS = {
             "slug": "buscar_imoveis_perfil",
             "name": "Buscar Imóveis por Perfil",
             "description": "Recebe critérios do lead (orçamento, localização, tipo, metragem) e retorna imóveis compatíveis.",
-            "prompt": "Informe um objeto 'profile' com as preferências do cliente."
+            "prompt": "Informe um objeto 'profile' com as preferências do cliente (OBRIGATÓRIO type em minúsculo: 'apartamento', 'casa', 'comercial' ou 'terreno')."
         },
         {
             "slug": "vincular_imovel_lead",
