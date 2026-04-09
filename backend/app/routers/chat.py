@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.agent import Agent
 from app.schemas.chat import ChatRequest, ChatResponse, ConversationResponse, ConversationDetailResponse, MessageResponse
-from app.agents.orchestrator import route_to_agent, run_agent_stream, get_agent_config, AgentRedirectSignal
+from app.agents.orchestrator import route_to_agent, run_agent_stream, get_agent_config, AgentRedirectSignal, AgentToolCallSignal
 
 router = APIRouter()
 
@@ -129,7 +129,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 # Se terminou sem erro de redirecionamento, salva o trace do step e sai
                 step_log["success"] = True
                 trace_log["calls"].append(step_log)
-                response_text = "".join(full_response)
+                response_text += "".join(full_response)
                 break
                 
             except AgentRedirectSignal as redirect:
@@ -169,7 +169,44 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 # Monta o contexto para o próximo agente (o alvo do redirecionamento)
                 current_redirect_context = f"⚠️ [ATENÇÃO DO SISTEMA]\nVocê está recebendo este usuário após um roteamento/redirecionamento disparado pelo agente '{old_slug}'.\nO agente anterior informou a seguinte justificativa para te chamar: \"{target_slug_reason}\"\n\nAssuma o atendimento a partir daqui para sanar a dor apontada!"
                 
-                # O laço recomeça enviando um novo agent_selected e iterando!
+            except AgentToolCallSignal as tool_req:
+                # O Agente decidiu chamar uma Tool!
+                step_log["success"] = True
+                step_log["tool_call"] = {
+                    "name": tool_req.tool_name,
+                    "arguments": tool_req.arguments
+                }
+                step_log["raw_ai_output"] = tool_req.raw_response
+                trace_log["calls"].append(step_log)
+
+                # Salva o texto que foi gerado até agora, se houver
+                response_text += "".join(full_response)
+                
+                # Feedback visual na UI
+                feedback_str = f"\\n\\n🔄 *Consultando sistema ({tool_req.tool_name})...*\\n\\n"
+                response_text += feedback_str.replace("\\n", "\n")
+                yield f'data: {json.dumps({"type": "token", "content": feedback_str})}\n\n'
+
+                try:
+                    import httpx
+                    from app.core.security import create_access_token
+                    internal_token = create_access_token({"sub": "admin@realestateassistant.com"})
+                    
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        t_res = await client.post(
+                            f"http://localhost:8000/api/v1/tools/{tool_req.tool_name}/execute",
+                            json={"params": tool_req.arguments},
+                            headers={"Authorization": f"Bearer {internal_token}"}
+                        )
+                    res_data = t_res.json()
+                    res_str = json.dumps(res_data.get("result", res_data), ensure_ascii=False)
+                except Exception as e:
+                    res_str = f"Erro interno ao executar a ferramenta: {str(e)}"
+                
+                # Alimenta o LLM de volta com a resposta real do backend
+                current_redirect_context = f"⚠️ [ATENÇÃO DO SISTEMA]\nVocê acabou de solicitar a execução da ferramenta '{tool_req.tool_name}'.\n\n**DADOS RETORNADOS DA FERRAMENTA:**\n```json\n{res_str}\n```\n\nAnalise detalhadamente as informações e responda ao usuário (sem usar a mesma ferramenta repetidamente caso ela já tenha retornado os dados necessários)."
+                
+                # O loop continua imediatamente com o LLM recebendo este novo contexto e respondendo ao usuário
 
         trace_log["final_agent"] = agent_slug
         # Envia o log de trace no final da stream

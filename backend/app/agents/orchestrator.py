@@ -218,6 +218,13 @@ class AgentRedirectSignal(Exception):
         self.raw_response = raw_response
         super().__init__(f"Agent requested redirect to {target_slug}. Reason: {reason}")
 
+class AgentToolCallSignal(Exception):
+    def __init__(self, tool_name: str, arguments: dict, raw_response: str = ""):
+        self.tool_name = tool_name
+        self.arguments = arguments
+        self.raw_response = raw_response
+        super().__init__(f"Agent requested tool call: {tool_name}")
+
 async def run_agent_stream(
     db: AsyncSession,
     agent_slug: str,
@@ -298,7 +305,8 @@ async def run_agent_stream(
                                 "output": { "type": "string", "minLength": 1 }
                             }
                         },
-                        "redirect": { "not": {} }
+                        "redirect": { "not": {} },
+                        "call_tool": { "not": {} }
                     }
                 },
                 {
@@ -322,7 +330,27 @@ async def run_agent_stream(
                                 }
                             }
                         },
-                        "response": { "not": {} }
+                        "response": { "not": {} },
+                        "call_tool": { "not": {} }
+                    }
+                },
+                {
+                    "title": "ToolCallOutput",
+                    "description": "O agente necessita usar uma ferramenta para obter informações reais.",
+                    "required": ["type", "call_tool"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "type": { "type": "string", "enum": ["tool_call"] },
+                        "call_tool": {
+                            "type": "object",
+                            "required": ["name", "arguments"],
+                            "properties": {
+                                "name": { "type": "string" },
+                                "arguments": { "type": "object" }
+                            }
+                        },
+                        "response": { "not": {} },
+                        "redirect": { "not": {} }
                     }
                 }
             ]
@@ -372,6 +400,8 @@ async def run_agent_stream(
                 if re.search(r'"type"\s*:\s*"redirect"', buffer):
                     is_redirect = True
                     state = 3
+                elif re.search(r'"type"\s*:\s*"tool_call"', buffer):
+                    state = 4 # Acumula tudo
                 elif re.search(r'"type"\s*:\s*"response"', buffer):
                     is_redirect = False
                     state = 1
@@ -414,9 +444,28 @@ async def run_agent_stream(
                 # Reseta o buffer mas guarda a contrabarra se ela sobrou solta no final do chunk
                 buffer = "\\" if in_escape else ""
 
-            if state == 3:
-                # Para redirecionamentos, apenas acumulamos o JSON até a Stream fechar.
+            if state == 3 or state == 4:
+                # Para redirecionamentos e chamadas de ferramenta, apenas acumulamos o JSON
                 pass
+
+        # === FIM DA CADEIA ===
+        
+        # CHECAGEM UNIVERSAL DE TOOL_CALL
+        try:
+            clean_json = re.sub(r'```json\s*|\s*```', '', buffer).strip()
+            if clean_json.startswith("{") and clean_json.endswith("}"):
+                parsed = json.loads(clean_json)
+                if parsed.get("type") == "tool_call" and "call_tool" in parsed:
+                     tool_data = parsed["call_tool"]
+                     raise AgentToolCallSignal(tool_data.get("name"), tool_data.get("arguments", {}), raw_response=buffer)
+                elif parsed.get("call_tool") and not parsed.get("type"):
+                     # Fallback caso ele esqueça do type mas mande call_tool
+                     tool_data = parsed["call_tool"]
+                     raise AgentToolCallSignal(tool_data.get("name"), tool_data.get("arguments", {}), raw_response=buffer)
+        except json.JSONDecodeError:
+            pass
+        except AgentToolCallSignal:
+            raise
 
         if is_redirect:
             try:
@@ -465,8 +514,11 @@ async def run_agent_stream(
         )
         await db.commit()
 
+        await db.commit()
+
     except AgentRedirectSignal:
-        # Repassa a exceção de roteamento de volta pro router interceptar e reiniciar
+        raise
+    except AgentToolCallSignal:
         raise
     except Exception as e:
         logger.error(f"Agent {agent_slug} error: {e}")
