@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, ArrowRight, User, Bot, Search, Code, List, ChevronDown, ChevronRight, MessageSquare, Terminal, FileText } from 'lucide-react'
+import { X, ArrowRight, User, Bot, Search, Code, List, ChevronDown, ChevronRight, MessageSquare, Terminal, FileText, Copy, Check } from 'lucide-react'
 
 interface TraceCall {
   agent_slug: string
@@ -105,8 +105,16 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
 
 export default function TraceModal({ isOpen, onClose, trace }: TraceModalProps) {
   const [showJson, setShowJson] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
 
   if (!isOpen || !trace) return null
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(JSON.stringify(trace, null, 2))
+    setIsCopied(true)
+    setTimeout(() => setIsCopied(false), 2000)
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{
@@ -136,12 +144,22 @@ export default function TraceModal({ isOpen, onClose, trace }: TraceModalProps) 
         </div>
 
         {showJson ? (
-          <div className="json-view" style={{
-            background: 'rgba(0,0,0,0.4)', padding: '16px', borderRadius: '8px', 
-            border: '1px solid var(--border)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', 
-            color: '#FFFFFF', whiteSpace: 'pre-wrap', overflowX: 'auto', maxHeight: '600px'
-          }}>
-            {JSON.stringify(trace, null, 2)}
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={handleCopy}
+              className="btn btn-sm btn-ghost" 
+              style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(255,255,255,0.1)', color: '#FFF' }}
+              title="Copiar JSON"
+            >
+              {isCopied ? <Check size={14} style={{ color: 'var(--success)' }} /> : <Copy size={14} />}
+            </button>
+            <div className="json-view" style={{
+              background: 'rgba(0,0,0,0.4)', padding: '16px', borderRadius: '8px', 
+              border: '1px solid var(--border)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', 
+              color: '#FFFFFF', whiteSpace: 'pre-wrap', overflowX: 'auto', maxHeight: '600px'
+            }}>
+              {JSON.stringify(trace, null, 2)}
+            </div>
           </div>
         ) : (
           <div className="timeline" style={{ display: 'flex', flexDirection: 'column', gap: '24px', position: 'relative' }}>
