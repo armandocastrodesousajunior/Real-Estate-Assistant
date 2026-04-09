@@ -19,14 +19,22 @@ function App() {
     return () => window.removeEventListener('storage', check)
   }, [])
 
-  if (!isLoggedIn) {
-    return <Login onLogin={() => setIsLoggedIn(true)} />
-  }
-
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        <Route 
+          path="/login" 
+          element={
+            isLoggedIn ? <Navigate to="/dashboard" replace /> : <Login onLogin={() => setIsLoggedIn(true)} />
+          } 
+        />
+        
+        <Route 
+          path="/" 
+          element={
+            isLoggedIn ? <Layout /> : <Navigate to="/login" replace />
+          }
+        >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="properties" element={<Properties />} />
@@ -38,6 +46,8 @@ function App() {
           <Route path="leads" element={<Leads />} />
           <Route path="logs" element={<Logs />} />
         </Route>
+        
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { authAPI } from '../services/api'
 import { Home, Mail, Lock, Eye, EyeOff } from 'lucide-react'
 
@@ -10,6 +11,7 @@ export default function Login({ onLogin }: Props) {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -19,6 +21,7 @@ export default function Login({ onLogin }: Props) {
       const { data } = await authAPI.login(email, password)
       localStorage.setItem('rea_token', data.access_token)
       onLogin()
+      navigate('/dashboard')
     } catch {
       setError('Email ou senha inválidos. Verifique suas credenciais.')
     } finally {

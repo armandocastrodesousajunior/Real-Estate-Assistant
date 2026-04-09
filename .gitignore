@@ -42,3 +42,6 @@ frontend/.env
 # --- Logs ---
 *.log
 logs/
+
+# --- Prompts Testes ---
+PROMPTS-TEST/
