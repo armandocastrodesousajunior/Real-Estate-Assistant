@@ -23,6 +23,7 @@ export default function Playground() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingAgent, setStreamingAgent] = useState<{ name: string; emoji: string } | null>(null)
   const [streamingText, setStreamingText] = useState('')
+  const [activeTool, setActiveTool] = useState<string | null>(null)
   const [showConfig, setShowConfig] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [selectedTrace, setSelectedTrace] = useState<any>(null)
@@ -46,6 +47,7 @@ export default function Playground() {
   const streamingTextRef = useRef('')
   const streamingAgentRef = useRef<{ name: string; emoji: string } | null>(null)
   const streamingTraceRef = useRef<any>(null)
+  const activeToolRef = useRef<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -59,8 +61,8 @@ export default function Playground() {
   }
 
   const loadConversation = async (sessionId: string) => {
-    setActiveSession(sessionId); setIsStreaming(false); setStreamingText(''); setStreamingAgent(null)
-    streamingTextRef.current = ''; streamingAgentRef.current = null; streamingTraceRef.current = null; setMessages([])
+    setActiveSession(sessionId); setIsStreaming(false); setStreamingText(''); setStreamingAgent(null); setActiveTool(null)
+    streamingTextRef.current = ''; streamingAgentRef.current = null; streamingTraceRef.current = null; activeToolRef.current = null; setMessages([])
     try {
       const { data } = await chatAPI.getConversation(sessionId)
       if (!data?.messages) return
@@ -68,7 +70,7 @@ export default function Playground() {
     } catch { setActiveSession(null) }
   }
 
-  const newChat = () => { setActiveSession(null); setMessages([]); setStreamingText('') }
+  const newChat = () => { setActiveSession(null); setMessages([]); setStreamingText(''); setActiveTool(null); activeToolRef.current = null }
 
   const deleteConversation = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -82,8 +84,8 @@ export default function Playground() {
     const text = input.trim()
     if (!text || isStreaming) return
     setMessages(prev => [...prev, { role: 'user', content: text }])
-    setInput(''); setIsStreaming(true); setStreamingText(''); setStreamingAgent(null)
-    streamingTextRef.current = ''; streamingAgentRef.current = null
+    setInput(''); setIsStreaming(true); setStreamingText(''); setStreamingAgent(null); setActiveTool(null)
+    streamingTextRef.current = ''; streamingAgentRef.current = null; activeToolRef.current = null
     try {
       const response = await chatAPI.streamChat(text, activeSession || undefined, selectedAgentSlug || undefined, true)
       const reader = response.body!.getReader()
@@ -103,8 +105,15 @@ export default function Playground() {
               setStreamingAgent({ name: event.agent_name, emoji: event.agent_emoji })
               if (event.session_id) setActiveSession(event.session_id)
             } else if (event.type === 'token') {
+              if (activeToolRef.current) {
+                setActiveTool(null)
+                activeToolRef.current = null
+              }
               streamingTextRef.current += event.content
               setStreamingText(streamingTextRef.current)
+            } else if (event.type === 'tool_call') {
+              setActiveTool(event.tool_name)
+              activeToolRef.current = event.tool_name
             } else if (event.type === 'debug_trace') {
               streamingTraceRef.current = event.trace
             }
@@ -112,7 +121,7 @@ export default function Playground() {
         }
       }
       setMessages(prev => [...prev, { role: 'assistant', content: streamingTextRef.current, agentName: streamingAgentRef.current?.name, agentEmoji: streamingAgentRef.current?.emoji, metadata: streamingTraceRef.current }])
-      setStreamingText(''); setStreamingAgent(null)
+      setStreamingText(''); setStreamingAgent(null); setActiveTool(null); activeToolRef.current = null
       const { data } = await chatAPI.listConversations({ is_test: true })
       setConversations(data)
     } catch {
@@ -360,7 +369,7 @@ export default function Playground() {
                 </div>
               ))}
 
-              {(isStreaming || streamingText) && (
+              {(isStreaming || streamingText || activeTool) && (
                 <div className="msg-wrapper assistant">
                   <div className="msg-avatar bot" style={{ background: 'transparent' }}>
                     <AgentIcon name={streamingAgent?.name || 'IA'} emoji={streamingAgent?.emoji} size="xs" />
@@ -368,7 +377,31 @@ export default function Playground() {
                   <div className="msg-content-container">
                     {streamingAgent && <div className="msg-agent-name">{streamingAgent.name}</div>}
                     <div className="msg-bubble assistant">
-                      {streamingText || <div className="typing-dot-loading"><span /></div>}
+                      {streamingText && (
+                        <div dangerouslySetInnerHTML={{
+                          __html: streamingText
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                            .replace(/`(.*?)`/g, '<code>$1</code>')
+                            .replace(/\n/g, '<br>')
+                        }} />
+                      )}
+                      
+                      {activeTool && (
+                        <div style={{ 
+                          display: 'flex', alignItems: 'center', gap: '8px', 
+                          padding: '10px 14px', background: 'var(--bg-elevated)', border: '1px solid var(--accent)', 
+                          borderRadius: '8px', fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 600,
+                          marginTop: streamingText ? '12px' : '0'
+                        }}>
+                          <Wrench size={16} className="animate-spin" style={{ color: 'var(--accent)', animationDuration: '3s' }} />
+                          <span>Executando Ferramenta: <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{activeTool}</span>...</span>
+                          <div className="spinner" style={{ width: '14px', height: '14px', borderTopColor: 'var(--accent)', marginLeft: 'auto' }} />
+                        </div>
+                      )}
+
+                      {(!streamingText && !activeTool) && <div className="typing-dot-loading"><span /></div>}
+                      {(streamingText && !activeTool && isStreaming) && <div className="typing-dot-loading" style={{ marginTop: '8px' }}><span /></div>}
                     </div>
                   </div>
                 </div>

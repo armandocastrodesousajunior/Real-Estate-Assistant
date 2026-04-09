@@ -183,9 +183,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 response_text += "".join(full_response)
                 
                 # Feedback visual na UI
-                feedback_str = f"\\n\\n🔄 *Consultando sistema ({tool_req.tool_name})...*\\n\\n"
-                response_text += feedback_str.replace("\\n", "\n")
-                yield f'data: {json.dumps({"type": "token", "content": feedback_str})}\n\n'
+                yield f'data: {json.dumps({"type": "tool_call", "tool_name": tool_req.tool_name})}\n\n'
 
                 try:
                     import httpx
