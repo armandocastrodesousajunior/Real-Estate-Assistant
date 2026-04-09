@@ -110,15 +110,17 @@ export default function Dashboard() {
                   style={{ opacity: agent.is_active ? 1 : 0.5, cursor: 'pointer' }}
                   onClick={() => navigate('/playground/agents')}
                 >
-                  <div className="agent-header">
-                    <AgentIcon name={agent.name} emoji={agent.emoji} size="lg" />
-                    <div style={{ flex: 1 }}>
-                      <div className="agent-name">{agent.name}</div>
-                      <div className="agent-slug">{agent.slug}</div>
-                    </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                     <span className={`badge ${agent.is_active ? 'badge-success' : 'badge-muted'}`}>
                       {agent.is_active ? '● Ativo' : '○ Inativo'}
                     </span>
+                  </div>
+                  <div className="agent-header">
+                    <AgentIcon name={agent.name} emoji={agent.emoji} size="lg" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="agent-name">{agent.name}</div>
+                      <div className="agent-slug">{agent.slug}</div>
+                    </div>
                   </div>
                   <div className="agent-model">{agent.model}</div>
                   <div className="agent-stats">

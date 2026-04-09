@@ -210,6 +210,7 @@ ul{list-style:none}
 .badge-error{background:var(--error-dim);color:var(--error)}
 .badge-info{background:var(--info-dim);color:var(--info)}
 .badge-muted{background:var(--bg-elevated);color:var(--text-muted)}
+.agent-header .badge{flex-shrink:0}
 .badge-primary{background:var(--primary-dim);color:var(--primary)}
 
 /* ── TABLE ── */
@@ -292,12 +293,24 @@ ul{list-style:none}
 .property-spec{display:flex;align-items:center;gap:5px;font-size:0.77rem;color:var(--text-secondary)}
 
 /* ── AGENT CARDS ── */
-.agent-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;transition:var(--transition);box-shadow:var(--shadow-card)}
+.agent-card{position:relative;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;transition:var(--transition);box-shadow:var(--shadow-card)}
 .agent-card:hover{border-color:var(--accent);transform:translateY(-2px)}
-.agent-header{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.agent-header{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;min-height:46px}
 .agent-emoji{width:46px;height:46px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:var(--bg-elevated);border:1px solid var(--border)}
-.agent-name{font-family:var(--font-display);font-size:0.95rem;font-weight:700;color:var(--text-primary)}
-.agent-slug{font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px}
+.agent-name{
+  font-family:var(--font-display);
+  font-size:0.95rem;
+  font-weight:700;
+  color:var(--text-primary);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  line-clamp:2;
+  overflow:hidden;
+  line-height:1.2;
+  min-height:2.4em;
+}
+.agent-slug{font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .agent-model{font-size:0.73rem;font-family:var(--font-mono);color:var(--primary);background:var(--primary-dim);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-sm);padding:3px 8px;margin-bottom:12px;display:inline-block}
 .agent-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-top:14px;border-top:1px solid var(--border)}
 .agent-stat{text-align:center;padding:8px;background:var(--bg-elevated);border-radius:var(--radius-sm)}
