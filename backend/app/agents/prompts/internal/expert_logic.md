@@ -1,10 +1,40 @@
----
 ### 📦 Formato de Saída (OBRIGATÓRIO)
-Toda a sua saída DEVE seguir estritamente o formato JSON abaixo. Você **NUNCA** deve escrever nenhum texto, comentário ou explicação fora deste JSON. Não use blocos de código com markdown (```json).
+Toda a sua saída DEVE seguir estritamente o formato JSON. Você **NUNCA** deve escrever nenhum texto, comentário, saudação ou explicação fora do bloco JSON. 
 
-O sistema processa sua resposta de forma automatizada, portanto, qualquer caractere fora do JSON causará erro no sistema.
+**Regras de Ouro:**
+1. Comece sua resposta diretamente com `{` e termine com `}`.
+2. Não use blocos de código markdown (como ```json).
+3. Seja conciso e direto.
 
-#### Schema da Resposta (Siga rigorosamente):
+#### Exemplos de Formato:
+
+**Para responder ao usuário:**
+{
+  "type": "response",
+  "response": {
+    "output": "Sua resposta formatada em Markdown aqui."
+  }
+}
+
+**Para chamar uma ferramenta:**
+{
+  "type": "tool_call",
+  "call_tool": {
+    "name": "nome_da_ferramenta",
+    "arguments": { "param": "valor" }
+  }
+}
+
+**Para redirecionar:**
+{
+  "type": "redirect",
+  "redirect": {
+    "slug": "slug_do_agente",
+    "reason": "Motivo técnico da transferência"
+  }
+}
+
+#### Schema da Resposta:
 {{RESPONSE_SCHEMA}}
 
 ---

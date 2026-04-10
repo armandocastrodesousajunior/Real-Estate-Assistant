@@ -17,6 +17,22 @@ from app.core.tools_registry import get_tool_by_slug, format_tools_for_prompt
 
 
 
+def extract_json_block(text: str) -> str:
+    """Tenta localizar e extrair o primeiro bloco JSON {...} dentro de um texto sujo"""
+    try:
+        # Remove possíveis marcações de markdown
+        clean = re.sub(r'```json\s*|\s*```', '', text).strip()
+        
+        start = clean.find('{')
+        end = clean.rfind('}')
+        
+        if start != -1 and end != -1 and end > start:
+            return clean[start:end+1]
+        return clean
+    except:
+        return text
+
+
 async def get_agent_config(db: AsyncSession, slug: str) -> Optional[Agent]:
     result = await db.execute(select(Agent).where(Agent.slug == slug, Agent.is_active == True))
     return result.scalar_one_or_none()
@@ -139,8 +155,8 @@ Qual agente deve responder?"""
             max_tokens=300
         )
         
-        # Limpar markdown se presente (```json ... ```)
-        clean_json = re.sub(r'```json\s*|\s*```', '', raw_output).strip()
+        # Extração robusta do JSON
+        clean_json = extract_json_block(raw_output)
         
         try:
             data = json.loads(clean_json)
@@ -200,8 +216,8 @@ async def repair_agent_output(broken_content: str, repair_type: str = "expert") 
             max_tokens=1000
         )
         
-        # Limpar markdown do reparo
-        clean_repair = re.sub(r'```json\s*|\s*```', '', raw_repair).strip()
+        # Extração robusta do JSON do reparo
+        clean_repair = extract_json_block(raw_repair)
         data = json.loads(clean_repair)
         return data
     except Exception as e:
@@ -451,9 +467,8 @@ async def run_agent_stream(
 
         # === FIM DA CADEIA ===
         
-        # CHECAGEM UNIVERSAL DE TOOL_CALL
         try:
-            clean_json = re.sub(r'```json\s*|\s*```', '', buffer).strip()
+            clean_json = extract_json_block(buffer)
             if clean_json.startswith("{") and clean_json.endswith("}"):
                 parsed = json.loads(clean_json)
                 if parsed.get("type") == "tool_call" and "call_tool" in parsed:
@@ -591,8 +606,8 @@ async def run_agent_complete(
             content = result["choices"][0]["message"]["content"]
             tokens = result.get("usage", {}).get("total_tokens", 0)
             
-            # Limpa markdown
-            clean_content = re.sub(r'```json\s*|\s*```', '', content).strip()
+            # Extração robusta do JSON
+            clean_content = extract_json_block(content)
             data = json.loads(clean_content)
             
             # Se for resposta direta, extrai o output

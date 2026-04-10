@@ -10,10 +10,22 @@ Toda a sua saída DEVE seguir estritamente o formato JSON abaixo. Você **NUNCA*
 #### Schema da Resposta (Siga rigorosamente):
 ```json
 {
-  "type": "response",
-  "response": {
-    "output": "A mensagem corrigida e formatada em Markdown aqui"
-  }
+  "type": "string",
+  "enum": ["response", "redirect", "tool_call"],
+  "oneOf": [
+    {
+      "type": "response",
+      "response": { "output": "Mensagem formatada" }
+    },
+    {
+      "type": "redirect",
+      "redirect": { "slug": "agente_slug", "reason": "Motivo" }
+    },
+    {
+       "type": "tool_call",
+       "call_tool": { "name": "tool_name", "arguments": {} }
+    }
+  ]
 }
 ```
 
