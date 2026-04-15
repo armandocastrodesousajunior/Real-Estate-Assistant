@@ -257,17 +257,21 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     <div
       className="modal-overlay"
       onClick={onClose}
-      style={{ zIndex: 1000, alignItems: 'stretch', padding: '0' }}
+      style={{ zIndex: 1000 }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: '100vw',
-          height: '100vh',
+          width: '78vw',
+          height: '88vh',
+          maxWidth: '1320px',
           background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: '20px',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.15)',
         }}
       >
         {/* ─── TOP BAR ─────────────────────────────────────────────── */}
