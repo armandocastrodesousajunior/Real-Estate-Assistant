@@ -43,6 +43,8 @@
   --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-body:    'Inter', system-ui, sans-serif;
   --font-mono:    'JetBrains Mono', monospace;
+  --font-sans:    'Inter', system-ui, sans-serif;
+  --bg-sidebar:   #0C1528;
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -557,3 +559,8 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;height:4p
 .group:hover .group-hover\:text-primary{color:var(--accent)}
 .ml-1{margin-left:4px}
 .items-start{align-items:flex-start}
+.animate-pulse{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* ── PROMPT ASSISTANT FULLSCREEN ── */
+.modal-overlay.pa-fullscreen{padding:0;align-items:stretch}

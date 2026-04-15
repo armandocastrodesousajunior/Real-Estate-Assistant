@@ -185,13 +185,16 @@ async def prompt_assistant_chat(
     # 3. Monta o histórico
     messages = [{"role": "system", "content": system_prompt}]
     
-    # Se há um prompt atual, diz pro Assistant
+    # Injeta o prompt atual para edição cirúrgica
     if req.current_prompt and len(req.current_prompt) > 10:
-         messages.append({
-             "role": "user", 
-             "content": f"[INFORMAÇÃO DO SISTEMA] O usuário está editando um prompt atualmente. O texto atual na tela dele é:\n```markdown\n{req.current_prompt}\n```\nLeve isso em consideração ao ajudar."
-         })
-         messages.append({"role": "assistant", "content": "Entendido. Tenho acesso ao prompt atual do usuário. Qual a alteração solicitada?"})
+        messages.append({
+            "role": "user",
+            "content": f"[PROMPT ATUAL]\n{req.current_prompt}\n[/PROMPT ATUAL]\n\nO prompt acima é o texto que precisa ser editado. Aguardo sua instrução de edição."
+        })
+        messages.append({
+            "role": "assistant",
+            "content": "Entendido. Tenho o prompt atual carregado. Diga-me o que quer alterar e retornarei apenas as operações de edição necessárias em formato JSON."
+        })
 
     for h in req.history:
         messages.append({"role": h.role, "content": h.content})
