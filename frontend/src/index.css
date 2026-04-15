@@ -387,8 +387,12 @@ ul{list-style:none}
 .typing-dot-loading::before,.typing-dot-loading::after,.typing-dot-loading span{content:'';width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
 .typing-dot-loading::after{animation-delay:0.2s}
 .typing-dot-loading span{animation-delay:0.4s}
-.btn-trace{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:4px 10px;border-radius:var(--radius-sm);background:var(--primary-dim);border:1px solid rgba(99,102,241,0.2);color:var(--primary);font-size:0.72rem;cursor:pointer;transition:var(--transition)}
-.btn-trace:hover{background:rgba(99,102,241,0.25);border-color:var(--primary)}
+.msg-actions{display:flex;gap:6px;margin-top:4px;padding:0 4px;opacity:0;transition:var(--transition)}
+.msg-wrapper:hover .msg-actions{opacity:1}
+.msg-action-btn{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;color:var(--text-muted);cursor:pointer;transition:var(--transition);position:relative}
+.msg-action-btn:hover{background:var(--bg-elevated);border-color:var(--border);color:var(--text-primary)}
+.msg-action-btn::after{content:attr(data-tooltip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%) translateY(4px);background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:4px 8px;border-radius:var(--radius-sm);font-size:0.65rem;white-space:nowrap;opacity:0;visibility:hidden;transition:var(--transition);z-index:99;box-shadow:var(--shadow-sm);font-weight:600;font-family:var(--font-body);pointer-events:none}
+.msg-action-btn:hover::after{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
 .playground-input-footer{padding:16px 22px;border-top:1px solid var(--border);background:var(--bg-surface);flex-shrink:0}
 .input-box-container{display:flex;align-items:flex-end;gap:10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;transition:var(--transition)}
 .input-box-container:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}

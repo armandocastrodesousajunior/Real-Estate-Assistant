@@ -26,7 +26,6 @@ export default function Playground() {
   const [streamingText, setStreamingText] = useState('')
   const [activeTool, setActiveTool] = useState<string | null>(null)
   const [showConfig, setShowConfig] = useState(false)
-  const [showDebug, setShowDebug] = useState(false)
   const [selectedTrace, setSelectedTrace] = useState<any>(null)
   const [editedPrompt, setEditedPrompt] = useState('')
   const [editedParams, setEditedParams] = useState({ model: '', temperature: 0.7, max_tokens: 2048 })
@@ -305,13 +304,6 @@ export default function Playground() {
             )}
           </div>
           <div className="agent-actions">
-            <button
-              className={`btn btn-sm ${showDebug ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setShowDebug(!showDebug)}
-              title="Debug Trace"
-            >
-              <Activity size={14} /> Debug
-            </button>
             {selectedAgentSlug && (
               <button
                 className={`btn btn-sm ${showConfig ? 'btn-primary' : 'btn-secondary'}`}
@@ -364,10 +356,12 @@ export default function Playground() {
                           .replace(/\n/g, '<br>')
                       }} />
                     </div>
-                    {showDebug && msg.role === 'assistant' && msg.metadata && (
-                      <button className="btn-trace" onClick={() => setSelectedTrace(msg.metadata)}>
-                        <Activity size={10} /> Ver processamento
-                      </button>
+                    {msg.role === 'assistant' && msg.metadata && (
+                      <div className="msg-actions">
+                        <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(msg.metadata)}>
+                          <Activity size={12} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
