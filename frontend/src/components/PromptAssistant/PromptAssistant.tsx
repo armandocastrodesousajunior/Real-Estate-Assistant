@@ -152,11 +152,14 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [pendingPatch, setPendingPatch] = useState<PatchResult | null>(null);
-  const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
+  // workingPrompt: accumulated version of the prompt after each round of patches
+  const [workingPrompt, setWorkingPrompt] = useState<string>(currentPrompt);
   const [patchError, setPatchError] = useState<string[]>([]);
   const [leftView, setLeftView] = useState<'current' | 'diff'>('current');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingTextRef = useRef('');
+  // Use ref so handleSend always reads the latest workingPrompt without stale closure
+  const workingPromptRef = useRef(currentPrompt);
 
   useEffect(() => {
     if (isOpen) {
@@ -165,7 +168,9 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
       setIsStreaming(false);
       setStreamingText('');
       setPendingPatch(null);
-      setPreviewPrompt(null);
+      // Reset accumulated prompt to the original from props
+      setWorkingPrompt(currentPrompt);
+      workingPromptRef.current = currentPrompt;
       setPatchError([]);
       setLeftView('current');
       streamingTextRef.current = '';
@@ -184,14 +189,14 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     setInput('');
     setIsStreaming(true);
     setStreamingText('');
-    setPendingPatch(null);
-    setPreviewPrompt(null);
+    // Don't reset workingPrompt here — we want to ACCUMULATE patches
     setPatchError([]);
     streamingTextRef.current = '';
 
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
-      const response = await promptsAPI.streamAssistantChat(text, history, currentPrompt);
+      // Always send the accumulated working version so AI patches the right base
+      const response = await promptsAPI.streamAssistantChat(text, history, workingPromptRef.current);
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -217,12 +222,14 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
       const finalText = streamingTextRef.current;
       setMessages(prev => [...prev, { role: 'assistant', content: finalText }]);
 
-      // Try to extract patch from the response
+      // Apply patch on top of the CURRENT accumulated workingPrompt
       const patch = extractPatchJSON(finalText);
       if (patch && mode === 'edit') {
-        const { result, applied, failed } = applyPatches(currentPrompt, patch.edits);
+        const { result, applied, failed } = applyPatches(workingPromptRef.current, patch.edits);
+        // Update both ref and state so next round uses the new accumulated version
+        workingPromptRef.current = result;
+        setWorkingPrompt(result);
         setPendingPatch(patch);
-        setPreviewPrompt(result);
         setPatchError(failed);
         setLeftView('diff');
       }
@@ -236,21 +243,23 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   };
 
   const handleApply = () => {
-    if (previewPrompt !== null) {
-      onApply(previewPrompt);
-    }
+    // Apply the fully accumulated working prompt
+    onApply(workingPrompt);
   };
 
   const handleDiscard = () => {
+    // Reset accumulated changes back to original
+    setWorkingPrompt(currentPrompt);
+    workingPromptRef.current = currentPrompt;
     setPendingPatch(null);
-    setPreviewPrompt(null);
     setPatchError([]);
     setLeftView('current');
   };
 
   if (!isOpen) return null;
 
-  const hasDiff = pendingPatch !== null && previewPrompt !== null;
+  // hasDiff: true once at least one patch has been accumulated (workingPrompt diverged from original)
+  const hasDiff = pendingPatch !== null && workingPrompt !== currentPrompt;
   const isEditMode = mode === 'edit';
 
   return (
@@ -389,8 +398,8 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                     {currentPrompt || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhum prompt carregado.</span>}
                   </div>
                 ) : (
-                  hasDiff && previewPrompt !== null && (
-                    <DiffViewer original={currentPrompt} modified={previewPrompt} />
+                  hasDiff && (
+                    <DiffViewer original={currentPrompt} modified={workingPrompt} />
                   )
                 )}
               </div>
