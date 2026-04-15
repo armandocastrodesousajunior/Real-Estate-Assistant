@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+import json
+import os
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.config import settings
 from app.models.agent import Agent
 from app.models.prompt import Prompt
-from app.schemas.chat import PromptSchema, PromptUpdate, PromptTest
+from app.schemas.chat import PromptSchema, PromptUpdate, PromptTest, PromptAssistantRequest
 from app.agents.openrouter import openrouter
+from loguru import logger
 
 router = APIRouter()
 
@@ -140,3 +145,78 @@ async def test_prompt(
             "model_used": model,
             "agent_slug": agent_slug,
         }
+
+@router.post(
+    "/assistant/chat",
+    summary="Chat Assistant para Prompts",
+    description="Interface SSE para conversar com o Especialista em Prompts.",
+)
+async def prompt_assistant_chat(
+    req: PromptAssistantRequest,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    # 1. Carrega o prompt base do especialista
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logic_path = os.path.join(base_path, "agents", "prompts", "internal", "prompt_builder_logic.md")
+    
+    try:
+        with open(logic_path, "r", encoding="utf-8") as f:
+            system_prompt = f.read()
+    except Exception as e:
+        logger.error(f"Erro ao carregar prompt_builder_logic.md: {e}")
+        system_prompt = "Você é um especialista em Prompts para Agentes de IA."
+
+    # 2. Carrega exemplos e injeta no prompt
+    examples_content = ""
+    examples_dir = os.path.join(base_path, "agents", "prompts", "examples")
+    try:
+        if os.path.exists(examples_dir):
+            for filename in os.listdir(examples_dir):
+                if filename.endswith(".md"):
+                    with open(os.path.join(examples_dir, filename), "r", encoding="utf-8") as f:
+                        content = f.read()
+                        examples_content += f"\n--- EXEMPLO: {filename} ---\n{content}\n"
+    except Exception as e:
+        logger.error(f"Erro ao carregar exemplos de prompt: {e}")
+    
+    system_prompt = system_prompt.replace("{{EXAMPLES_CONTENT}}", examples_content)
+
+    # 3. Monta o histórico
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Se há um prompt atual, diz pro Assistant
+    if req.current_prompt and len(req.current_prompt) > 10:
+         messages.append({
+             "role": "user", 
+             "content": f"[INFORMAÇÃO DO SISTEMA] O usuário está editando um prompt atualmente. O texto atual na tela dele é:\n```markdown\n{req.current_prompt}\n```\nLeve isso em consideração ao ajudar."
+         })
+         messages.append({"role": "assistant", "content": "Entendido. Tenho acesso ao prompt atual do usuário. Qual a alteração solicitada?"})
+
+    for h in req.history:
+        messages.append({"role": h.role, "content": h.content})
+        
+    messages.append({"role": "user", "content": req.message})
+
+    # 4. Stream
+    async def event_stream():
+        try:
+            async for chunk in openrouter.chat_completion_stream(
+                model=settings.SUPERVISOR_MODEL,
+                messages=messages,
+                temperature=0.5,
+                max_tokens=2048,
+            ):
+                yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
+                
+            yield f'data: {json.dumps({"type": "done"})}\n\n'
+        except Exception as e:
+            logger.error(f"Error in prompt assistant loop: {e}")
+            yield f'data: {json.dumps({"type": "error", "message": "Erro ao gerar resposta"})}\n\n'
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+

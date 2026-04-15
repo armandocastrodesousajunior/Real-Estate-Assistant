@@ -87,3 +87,12 @@ class PromptTest(BaseModel):
     system_prompt: str = Field(..., description="Prompt a ser testado")
     user_message: str = Field(..., min_length=1, description="Mensagem de teste")
     model: Optional[str] = Field(None, description="Modelo a usar (padrão: do agente)")
+
+class PromptAssistantMessage(BaseModel):
+    role: str
+    content: str
+                                 
+class PromptAssistantRequest(BaseModel):
+    message: str = Field(..., description="Mensagem do usuário")
+    history: List[PromptAssistantMessage] = Field(default_factory=list, description="Histórico da conversa no assistente")
+    current_prompt: Optional[str] = Field(None, description="Prompt atualmente editado no frontend, se houver")

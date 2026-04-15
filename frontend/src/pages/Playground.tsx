@@ -6,6 +6,7 @@ import {
 import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
 import AgentIcon from '../components/AgentIcon'
+import PromptAssistant from '../components/PromptAssistant/PromptAssistant'
 
 interface Message { role: string; content: string; agentSlug?: string; agentName?: string; agentEmoji?: string; metadata?: any }
 interface Conversation { id: number; session_id: string; title?: string; message_count: number; updated_at: string }
@@ -43,6 +44,9 @@ export default function Playground() {
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([])
   const [modelSearchTerm, setModelSearchTerm] = useState('')
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
+  
+  const [isPromptAssistantOpen, setIsPromptAssistantOpen] = useState(false)
+  const [promptAssistantMode, setPromptAssistantMode] = useState<'edit' | 'create'>('edit')
 
   const streamingTextRef = useRef('')
   const streamingAgentRef = useRef<{ name: string; emoji: string } | null>(null)
@@ -441,7 +445,16 @@ export default function Playground() {
 
           <div className="config-scroll-area">
             <div className="config-section">
-              <div className="config-label">System Prompt</div>
+              <div className="config-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span>System Prompt</span>
+                <button 
+                  className="btn btn-sm btn-ghost" 
+                  style={{ color: 'var(--accent)', fontSize: '0.75rem', padding: '2px 8px', height: 'auto' }} 
+                  onClick={() => { setPromptAssistantMode('edit'); setIsPromptAssistantOpen(true); }}
+                >
+                  <Bot size={13} style={{ marginRight: '4px' }}/> Usar IA
+                </button>
+              </div>
               <div className="prompt-editor-wrapper">
                 <textarea
                   className="prompt-editor"
@@ -649,7 +662,17 @@ export default function Playground() {
                 <input className="form-input" placeholder="O que este agente faz?" value={newAgentData.description} onChange={e => setNewAgentData({ ...newAgentData, description: e.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">System Prompt Inicial</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>System Prompt Inicial</label>
+                  <button 
+                    type="button"
+                    className="btn btn-sm btn-ghost" 
+                    style={{ color: 'var(--accent)', fontSize: '0.75rem', padding: '2px 8px', height: 'auto' }} 
+                    onClick={() => { setPromptAssistantMode('create'); setIsPromptAssistantOpen(true); }}
+                  >
+                    <Bot size={13} style={{ marginRight: '4px' }}/> Gerar com IA
+                  </button>
+                </div>
                 <textarea className="form-textarea" style={{ minHeight: '100px', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }} placeholder="Você é um especialista em..." value={newAgentData.system_prompt} onChange={e => setNewAgentData({ ...newAgentData, system_prompt: e.target.value })} />
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
@@ -664,6 +687,22 @@ export default function Playground() {
       )}
 
       <TraceModal isOpen={selectedTrace !== null} onClose={() => setSelectedTrace(null)} trace={selectedTrace} />
+      
+      <PromptAssistant 
+        isOpen={isPromptAssistantOpen}
+        onClose={() => setIsPromptAssistantOpen(false)}
+        mode={promptAssistantMode}
+        currentPrompt={promptAssistantMode === 'edit' ? editedPrompt : newAgentData.system_prompt}
+        onApply={(generatedPrompt) => {
+          if (promptAssistantMode === 'edit') {
+            setEditedPrompt(generatedPrompt);
+            setHasUnsavedChanges(true);
+          } else {
+            setNewAgentData({...newAgentData, system_prompt: generatedPrompt});
+          }
+          setIsPromptAssistantOpen(false);
+        }}
+      />
     </div>
   )
 }
