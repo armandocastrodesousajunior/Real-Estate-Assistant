@@ -81,7 +81,7 @@ export const promptsAPI = {
     api.get(`/api/v1/prompts/${agentSlug}/history`),
   test: (agentSlug: string, data: Record<string, unknown>) =>
     api.post(`/api/v1/prompts/${agentSlug}/test`, data),
-  streamAssistantChat: (message: string, history: Array<{role: string, content: string}>, currentPrompt?: string) => {
+  streamAssistantChat: (message: string, history: Array<{role: string, content: string}>, currentPrompt?: string, chatContext?: any) => {
     const token = localStorage.getItem('rea_token')
     return fetch(`${BASE_URL}/api/v1/prompts/assistant/chat`, {
       method: 'POST',
@@ -89,7 +89,7 @@ export const promptsAPI = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message, history, current_prompt: currentPrompt }),
+      body: JSON.stringify({ message, history, current_prompt: currentPrompt, chat_context: chatContext }),
     })
   },
 }

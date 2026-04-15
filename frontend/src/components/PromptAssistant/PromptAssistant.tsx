@@ -11,6 +11,7 @@ interface PromptAssistantProps {
   currentPrompt?: string;
   onApply: (generatedPrompt: string) => void;
   mode: 'edit' | 'create';
+  chatContext?: any;
 }
 
 interface ChatMessage {
@@ -146,7 +147,7 @@ function DiffViewer({ original, modified }: { original: string; modified: string
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', onApply, mode }: PromptAssistantProps) {
+export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', onApply, mode, chatContext }: PromptAssistantProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -176,6 +177,16 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
       setLeftView('current');
       setShowConfirmClose(false);
       streamingTextRef.current = '';
+
+      if (chatContext && chatContext.history) {
+        // Trigger auto-analysis without user action
+        setTimeout(() => {
+          handleSend(
+            "Aja como um consultor neste primeiro momento. Avalie o contexto detalhado dessa conversa e de que forma o agente lidou com o usuário até culminar na mensagem mencionada em foco. NÃO GERE UM JSON DE PATCH AGORA. Apenas me resuma de forma clara sua avaliação técnica da interação e pergunte como eu gostaria de modificar o comportamento do agente ou quais dúvidas tenho sobre o rastreamento.", 
+            "Analise esta conversa e o comportamento do agente na mensagem mencionada."
+          );
+        }, 300);
+      }
     }
   }, [isOpen]);
 
@@ -183,11 +194,12 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingText]);
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || isStreaming) return;
+  const handleSend = async (overrideApiText?: string, overrideVisibleText?: string) => {
+    const apiText = (typeof overrideApiText === 'string' ? overrideApiText : input).trim();
+    const visibleText = (typeof overrideVisibleText === 'string' ? overrideVisibleText : apiText);
+    if (!apiText || isStreaming) return;
 
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setMessages(prev => [...prev, { role: 'user', content: visibleText }]);
     setInput('');
     setIsStreaming(true);
     setStreamingText('');
@@ -198,7 +210,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
       // Always send the accumulated working version so AI patches the right base
-      const response = await promptsAPI.streamAssistantChat(text, history, workingPromptRef.current);
+      const response = await promptsAPI.streamAssistantChat(apiText, history, workingPromptRef.current, chatContext);
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -546,7 +558,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
                         <Sparkles size={13} className="animate-pulse" />
-                        Calculando edições cirúrgicas...
+                        Aguardando resposta...
                       </div>
                     )}
                   </div>
@@ -559,7 +571,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
             <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--bg-elevated)', flexShrink: 0 }}>
               <div className="input-box-container" style={{ background: 'var(--bg-card)', borderRadius: '10px' }}>
                 <textarea
-                  placeholder={isStreaming ? 'Calculando edições...' : isEditMode ? 'Descreva o que alterar... (Enter envia)' : 'Descreva o novo especialista... (Enter envia)'}
+                  placeholder={isStreaming ? 'Processando...' : isEditMode ? 'Descreva o que alterar ou converse com a IA... (Enter envia)' : 'Descreva o novo especialista... (Enter envia)'}
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}

@@ -46,6 +46,7 @@ export default function Playground() {
   
   const [isPromptAssistantOpen, setIsPromptAssistantOpen] = useState(false)
   const [promptAssistantMode, setPromptAssistantMode] = useState<'edit' | 'create'>('edit')
+  const [activeChatContext, setActiveChatContext] = useState<any>(null)
 
   const streamingTextRef = useRef('')
   const streamingAgentRef = useRef<{ name: string; emoji: string } | null>(null)
@@ -202,6 +203,33 @@ export default function Playground() {
     } catch { alert('Erro ao excluir agente.') }
   }
 
+  const handleMentionInEditor = async (index: number, msg: Message) => {
+    const history = messages.map(m => ({
+      role: m.role,
+      content: m.content,
+      agentName: m.agentName,
+      metadata: m.metadata
+    }));
+
+    const targetSlug = msg.agentSlug || selectedAgentSlug;
+    if (targetSlug && targetSlug !== selectedAgentSlug) {
+      setSelectedAgentSlug(targetSlug);
+      await loadAgentConfig(targetSlug);
+      setShowConfig(true);
+    } else if (!targetSlug) {
+      alert("Não foi possível identificar o agente desta mensagem.");
+      return;
+    }
+
+    setActiveChatContext({
+      focusedIndex: index,
+      history: history
+    });
+
+    setPromptAssistantMode('edit');
+    setIsPromptAssistantOpen(true);
+  }
+
   const currentAgent = selectedAgentSlug ? agents.find(a => a.slug === selectedAgentSlug) : null
 
   const layoutCols = selectedAgentSlug && showConfig ? '260px 1fr 320px' : '260px 1fr'
@@ -356,11 +384,16 @@ export default function Playground() {
                           .replace(/\n/g, '<br>')
                       }} />
                     </div>
-                    {msg.role === 'assistant' && msg.metadata && (
+                    {msg.role === 'assistant' && (
                       <div className="msg-actions">
-                        <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(msg.metadata)}>
-                          <Activity size={12} />
+                        <button className="msg-action-btn" data-tooltip="Mencionar no Editor" onClick={() => handleMentionInEditor(i, msg)}>
+                          <Bot size={12} />
                         </button>
+                        {msg.metadata && (
+                          <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(msg.metadata)}>
+                            <Activity size={12} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -684,9 +717,10 @@ export default function Playground() {
       
       <PromptAssistant 
         isOpen={isPromptAssistantOpen}
-        onClose={() => setIsPromptAssistantOpen(false)}
+        onClose={() => { setIsPromptAssistantOpen(false); setActiveChatContext(null); }}
         mode={promptAssistantMode}
         currentPrompt={promptAssistantMode === 'edit' ? editedPrompt : newAgentData.system_prompt}
+        chatContext={activeChatContext}
         onApply={(generatedPrompt) => {
           if (promptAssistantMode === 'edit') {
             setEditedPrompt(generatedPrompt);

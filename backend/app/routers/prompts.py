@@ -185,6 +185,36 @@ async def prompt_assistant_chat(
     # 3. Monta o histórico
     messages = [{"role": "system", "content": system_prompt}]
     
+    # Injeta o contexto da conversa se o usuário selecionou uma mensagem para debug
+    if req.chat_context and "history" in req.chat_context:
+        focused_idx = req.chat_context.get("focusedIndex", -1)
+        chat_logs = ""
+        for i, m in enumerate(req.chat_context.get("history", [])):
+            role = str(m.get("role", "unknown")).upper()
+            content = str(m.get("content", ""))
+            meta = m.get("metadata")
+            is_focused = (i == focused_idx)
+            
+            chat_logs += f"\n{'='*40}\n"
+            if is_focused:
+                chat_logs += f">>> MENSAGEM MENCIONADA PELO USUÁRIO (FOCO) <<<\n"
+            chat_logs += f"De: {role}\nConteúdo: {content}\n"
+            if meta:
+                meta_str = json.dumps(meta, ensure_ascii=False, indent=2)
+                # Limita tamanho dos logs p/ n estourar context
+                if len(meta_str) > 3000:
+                    meta_str = meta_str[:3000] + "\n... [TRUNCADO]"
+                chat_logs += f"Rastreamento da IA (Logs/Metadata): {meta_str}\n"
+        
+        messages.append({
+            "role": "user",
+            "content": f"[CONTEXTO DA CONVERSA - ANÁLISE]\nO usuário deseja avaliar a seguinte conversa que teve com o agente no Playground. Leia as interações abaixo para entender o contexto, as metodologias do agente e os rastreamentos associados. Dê total foco técnico na mensagem marcada e aguarde instruções do usuário:\n\n{chat_logs}\n\n[/CONTEXTO DA CONVERSA - ANÁLISE]"
+        })
+        messages.append({
+            "role": "assistant",
+            "content": "Entendido. Li todo o histórico da conversa, analisei a mensagem em foco e os logs de processamento. Vou processar o que foi solicitado sobre essa interação e sobre o prompt atual de forma colaborativa com o usuário."
+        })
+    
     # Injeta o prompt atual para edição cirúrgica
     if req.current_prompt and len(req.current_prompt) > 10:
         messages.append({
