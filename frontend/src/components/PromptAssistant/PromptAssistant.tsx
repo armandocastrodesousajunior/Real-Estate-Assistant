@@ -156,6 +156,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   const [workingPrompt, setWorkingPrompt] = useState<string>(currentPrompt);
   const [patchError, setPatchError] = useState<string[]>([]);
   const [leftView, setLeftView] = useState<'current' | 'diff'>('current');
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingTextRef = useRef('');
   // Use ref so handleSend always reads the latest workingPrompt without stale closure
@@ -173,6 +174,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
       workingPromptRef.current = currentPrompt;
       setPatchError([]);
       setLeftView('current');
+      setShowConfirmClose(false);
       streamingTextRef.current = '';
     }
   }, [isOpen]);
@@ -256,6 +258,16 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     setLeftView('current');
   };
 
+  const handleRequestClose = () => {
+    // hasDiff: true once at least one patch has been accumulated
+    const hasUnsaved = pendingPatch !== null && workingPrompt !== currentPrompt;
+    if (hasUnsaved) {
+      setShowConfirmClose(true);
+    } else {
+      onClose();
+    }
+  };
+
   if (!isOpen) return null;
 
   // hasDiff: true once at least one patch has been accumulated (workingPrompt diverged from original)
@@ -265,7 +277,6 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   return (
     <div
       className="modal-overlay"
-      onClick={onClose}
       style={{ zIndex: 1000 }}
     >
       <div
@@ -331,7 +342,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                 </button>
               </>
             )}
-            <button className="btn-icon-sm" onClick={onClose} style={{ marginLeft: '8px' }}>
+            <button className="btn-icon-sm" onClick={handleRequestClose} style={{ marginLeft: '8px' }}>
               <X size={18} />
             </button>
           </div>
@@ -568,6 +579,45 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
           </div>
         </div>
       </div>
+
+      {showConfirmClose && (
+        <div className="modal-overlay" style={{ zIndex: 1050, alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-content" style={{ maxWidth: '420px', padding: '24px', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--warning-dim)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Info size={24} />
+            </div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Alterações não salvas
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+              Você tem modificações pendentes no prompt que não foram aplicadas. Deseja aplicá-las ou descartá-las?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => { setShowConfirmClose(false); handleApply(); }}
+              >
+                Salvar e Sair
+              </button>
+              <button 
+                className="btn btn-danger" 
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => { setShowConfirmClose(false); handleDiscard(); onClose(); }}
+              >
+                Descartar Alterações
+              </button>
+              <button 
+                className="btn btn-ghost" 
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => setShowConfirmClose(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
