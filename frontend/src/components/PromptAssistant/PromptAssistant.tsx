@@ -4,15 +4,17 @@ import {
   ChevronRight, Sparkles, RotateCcw, Info
 } from 'lucide-react';
 import { promptsAPI } from '../../services/api';
+import type { AgentSpec } from '../../types/agent';
 
 interface PromptAssistantProps {
   isOpen: boolean;
   onClose: () => void;
   currentPrompt?: string;
-  onApply: (generatedPrompt: string) => void;
+  onApply: (generatedData: string | AgentSpec) => void;
   mode: 'edit' | 'create';
   chatContext?: any;
 }
+
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -94,10 +96,22 @@ function applyPatches(original: string, patches: EditPatch[]): { result: string;
 // ─── Extract JSON from AI response ───────────────────────────────────────────
 function extractPatchJSON(raw: string): PatchResult | null {
   try {
-    const match = raw.match(/```(?:json)?\n?([\s\S]*?)```/);
-    const jsonStr = match ? match[1] : raw;
+    const match = raw.match(/```(?:json)?\n?([\s\S]*?)({[\s\S]*?"edits"[\s\S]*?})[\s\S]*?```/);
+    const jsonStr = match ? match[2] : (raw.includes('"edits"') ? raw : null);
+    if (!jsonStr) return null;
     const parsed = JSON.parse(jsonStr.trim());
     if (parsed.edits && Array.isArray(parsed.edits)) return parsed as PatchResult;
+  } catch {}
+  return null;
+}
+
+function extractAgentSpecJSON(raw: string): AgentSpec | null {
+  try {
+    const match = raw.match(/```(?:json)?\n?([\s\S]*?)({[\s\S]*?"agent_spec"[\s\S]*?})[\s\S]*?```/);
+    const jsonStr = match ? match[2] : (raw.includes('"agent_spec"') ? raw : null);
+    if (!jsonStr) return null;
+    const parsed = JSON.parse(jsonStr.trim());
+    if (parsed.agent_spec) return parsed.agent_spec as AgentSpec;
   } catch {}
   return null;
 }
@@ -153,6 +167,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [pendingPatch, setPendingPatch] = useState<PatchResult | null>(null);
+  const [pendingAgentSpec, setPendingAgentSpec] = useState<AgentSpec | null>(null);
   // workingPrompt: accumulated version of the prompt after each round of patches
   const [workingPrompt, setWorkingPrompt] = useState<string>(currentPrompt);
   const [patchError, setPatchError] = useState<string[]>([]);
@@ -170,6 +185,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
       setIsStreaming(false);
       setStreamingText('');
       setPendingPatch(null);
+      setPendingAgentSpec(null);
       // Reset accumulated prompt to the original from props
       setWorkingPrompt(currentPrompt);
       workingPromptRef.current = currentPrompt;
@@ -210,7 +226,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
       // Always send the accumulated working version so AI patches the right base
-      const response = await promptsAPI.streamAssistantChat(apiText, history, workingPromptRef.current, chatContext);
+      const response = await promptsAPI.streamAssistantChat(apiText, history, workingPromptRef.current, chatContext, mode);
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -239,16 +255,23 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
       const finalText = streamingTextRef.current;
       setMessages(prev => [...prev, { role: 'assistant', content: finalText }]);
 
-      // Apply patch on top of the CURRENT accumulated workingPrompt
+      // 1. Check for Patch (Edit mode)
       const patch = extractPatchJSON(finalText);
       if (patch && mode === 'edit') {
         const { result, applied, failed } = applyPatches(workingPromptRef.current, patch.edits);
-        // Update both ref and state so next round uses the new accumulated version
         workingPromptRef.current = result;
         setWorkingPrompt(result);
         setPendingPatch(patch);
         setPatchError(failed);
         setLeftView('diff');
+      }
+
+      // 2. Check for AgentSpec (Create mode)
+      const spec = extractAgentSpecJSON(finalText);
+      if (spec && mode === 'create') {
+        setPendingAgentSpec(spec);
+        setWorkingPrompt(spec.system_prompt);
+        workingPromptRef.current = spec.system_prompt;
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || err.message || 'Erro de conexão.';
@@ -261,8 +284,11 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   };
 
   const handleApply = () => {
-    // Apply the fully accumulated working prompt
-    onApply(workingPrompt);
+    if (mode === 'create' && pendingAgentSpec) {
+      onApply(pendingAgentSpec);
+    } else {
+      onApply(workingPrompt);
+    }
   };
 
   const handleDiscard = () => {
@@ -276,8 +302,10 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
 
   const handleRequestClose = () => {
     // hasDiff: true once at least one patch has been accumulated
-    const hasUnsaved = pendingPatch !== null && workingPrompt !== currentPrompt;
-    if (hasUnsaved) {
+    const hasUnsavedEdit = mode === 'edit' && pendingPatch !== null && workingPrompt !== currentPrompt;
+    const hasUnsavedCreate = mode === 'create' && pendingAgentSpec !== null;
+    
+    if (hasUnsavedEdit || hasUnsavedCreate) {
       setShowConfirmClose(true);
     } else {
       onClose();
@@ -333,7 +361,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {hasDiff && (
+            {(hasDiff || (mode === 'create' && pendingAgentSpec)) && (
               <>
                 <button
                   className="btn btn-sm btn-ghost"
@@ -342,19 +370,21 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                 >
                   <RotateCcw size={13} /> Descartar
                 </button>
-                <button
-                  className={`btn btn-sm ${leftView === 'diff' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ fontSize: '0.75rem' }}
-                  onClick={() => setLeftView(leftView === 'diff' ? 'current' : 'diff')}
-                >
-                  <GitCompare size={13} /> {leftView === 'diff' ? 'Ver Original' : 'Ver Diff'}
-                </button>
+                {mode === 'edit' && (
+                  <button
+                    className={`btn btn-sm ${leftView === 'diff' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.75rem' }}
+                    onClick={() => setLeftView(leftView === 'diff' ? 'current' : 'diff')}
+                  >
+                    <GitCompare size={13} /> {leftView === 'diff' ? 'Ver Original' : 'Ver Diff'}
+                  </button>
+                )}
                 <button
                   className="btn btn-sm"
                   style={{ background: 'var(--accent)', color: '#fff', fontSize: '0.75rem' }}
                   onClick={handleApply}
                 >
-                  <CheckCircle2 size={13} /> Aplicar Alterações
+                  <CheckCircle2 size={13} /> {mode === 'create' ? 'Usar este Especialista' : 'Aplicar Alterações'}
                 </button>
               </>
             )}
@@ -365,81 +395,199 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
         </div>
 
         {/* ─── BODY ────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: isEditMode ? '1fr 1fr' : '1fr', overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', overflow: 'hidden' }}>
 
-          {/* LEFT: Prompt Panel (Edit mode only) */}
-          {isEditMode && (
-            <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
-              {/* Left header */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '8px 14px', borderBottom: '1px solid var(--border)',
-                background: 'var(--bg-elevated)', flexShrink: 0
-              }}>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  <button
-                    onClick={() => setLeftView('current')}
-                    style={{
-                      padding: '3px 10px', fontSize: '0.72rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                      background: leftView === 'current' ? 'var(--bg-card)' : 'transparent',
-                      color: leftView === 'current' ? 'var(--text-primary)' : 'var(--text-muted)',
-                      fontWeight: leftView === 'current' ? 700 : 400,
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    <FileText size={11} style={{ marginRight: '5px', verticalAlign: 'middle' }} />
-                    Prompt Atual
-                  </button>
-                  {hasDiff && (
+          {/* LEFT: Prompt Panel (Edit mode) or Agent Preview (Create mode) */}
+          <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
+            {mode === 'edit' ? (
+              <>
+                {/* Left header editing */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '8px 14px', borderBottom: '1px solid var(--border)',
+                  background: 'var(--bg-elevated)', flexShrink: 0
+                }}>
+                  <div style={{ display: 'flex', gap: '4px' }}>
                     <button
-                      onClick={() => setLeftView('diff')}
+                      onClick={() => setLeftView('current')}
                       style={{
                         padding: '3px 10px', fontSize: '0.72rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        background: leftView === 'diff' ? 'var(--bg-card)' : 'transparent',
-                        color: leftView === 'diff' ? 'var(--primary)' : 'var(--text-muted)',
-                        fontWeight: leftView === 'diff' ? 700 : 400,
-                        transition: 'all 0.15s',
-                        display: 'flex', alignItems: 'center', gap: '4px'
+                        background: leftView === 'current' ? 'var(--bg-card)' : 'transparent',
+                        color: leftView === 'current' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        fontWeight: leftView === 'current' ? 700 : 400,
+                        transition: 'all 0.15s'
                       }}
                     >
-                      <GitCompare size={11} />
-                      Comparar Mudanças
-                      <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: '10px', padding: '0 5px', fontSize: '0.62rem', marginLeft: '2px' }}>
-                        {pendingPatch?.edits.length}
-                      </span>
+                      <FileText size={11} style={{ marginRight: '5px', verticalAlign: 'middle' }} />
+                      Prompt Atual
                     </button>
+                    {hasDiff && (
+                      <button
+                        onClick={() => setLeftView('diff')}
+                        style={{
+                          padding: '3px 10px', fontSize: '0.72rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          background: leftView === 'diff' ? 'var(--bg-card)' : 'transparent',
+                          color: leftView === 'diff' ? 'var(--primary)' : 'var(--text-muted)',
+                          fontWeight: leftView === 'diff' ? 700 : 400,
+                          transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                      >
+                        <GitCompare size={11} />
+                        Comparar Mudanças
+                        <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: '10px', padding: '0 5px', fontSize: '0.62rem', marginLeft: '2px' }}>
+                          {pendingPatch?.edits.length}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  {hasDiff && pendingPatch && (
+                    <div style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {isStreaming && <div className="spinner-xs" style={{ width: '10px', height: '10px' }} />}
+                      {pendingPatch.summary}
+                    </div>
                   )}
                 </div>
 
-                {hasDiff && pendingPatch && (
-                  <div style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                    {pendingPatch.summary}
-                  </div>
-                )}
-              </div>
-
-              {/* Left content */}
-              <div style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-sidebar)' }}>
-                {leftView === 'current' ? (
-                  <div style={{ height: '100%', overflow: 'auto', padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', lineHeight: '1.7', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    {currentPrompt || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhum prompt carregado.</span>}
-                  </div>
-                ) : (
-                  hasDiff && (
-                    <DiffViewer original={currentPrompt} modified={workingPrompt} />
-                  )
-                )}
-              </div>
-
-              {/* Patch error banner */}
-              {patchError.length > 0 && (
-                <div style={{ padding: '8px 14px', background: 'rgba(239,68,68,0.1)', borderTop: '1px solid rgba(239,68,68,0.3)', fontSize: '0.72rem', color: '#f87171', flexShrink: 0 }}>
-                  <Info size={11} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-                  {patchError.length} trecho(s) não encontrado(s) para aplicar. Peça à IA para corrigir.
+                {/* Left content editing */}
+                <div style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-sidebar)' }}>
+                  {leftView === 'current' ? (
+                    <div style={{ height: '100%', overflow: 'auto', padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', lineHeight: '1.7', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {currentPrompt || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhum prompt carregado.</span>}
+                    </div>
+                  ) : (
+                    hasDiff && (
+                      <DiffViewer original={currentPrompt} modified={workingPrompt} />
+                    )
+                  )}
                 </div>
-              )}
-            </div>
-          )}
+              </>
+            ) : (
+              /* MODO CREATE: Preview do Agente Gerado */
+              <div style={{ flex: 1, overflow: 'auto', padding: '24px', background: 'var(--bg-sidebar)' }}>
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h4 style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', margin: 0 }}>
+                      Projeto do Especialista
+                    </h4>
+                    {isStreaming && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: 'var(--primary)' }}>
+                        <div className="spinner-xs" style={{ width: '10px', height: '10px' }} />
+                        <span>Desenhando...</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {pendingAgentSpec ? (
+                    <div className={`card ${isStreaming ? 'animate-pulse' : ''}`} style={{ padding: '24px', border: '1px solid var(--primary-dim)', background: 'var(--bg-card)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                        <div style={{ 
+                          width: 64, height: 64, borderRadius: '16px', 
+                          background: 'var(--primary-dim)', 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                          fontSize: '2.4rem',
+                          border: '1px solid var(--primary-dim)'
+                        }}>
+                          {pendingAgentSpec.emoji || '🤖'}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                            {pendingAgentSpec.name || 'Definindo nome...'}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontFamily: 'var(--font-mono)', opacity: 0.8 }}>
+                            @{pendingAgentSpec.slug || 'slug-automatico'}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div style={{ marginBottom: '20px' }}>
+                        <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                          Competências & Roteamento
+                        </div>
+                        <div style={{ 
+                          fontSize: '0.85rem', 
+                          color: 'var(--text-secondary)', 
+                          lineHeight: '1.6',
+                          background: 'var(--bg-sidebar)',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)'
+                        }}>
+                          {pendingAgentSpec.description || 'A IA está descrevendo as habilidades deste agente...'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                          System Prompt Estruturado
+                        </div>
+                        <div style={{ 
+                          fontSize: '0.75rem', 
+                          color: 'var(--text-muted)', 
+                          fontFamily: 'var(--font-mono)', 
+                          background: 'var(--bg-sidebar)', 
+                          padding: '12px', 
+                          borderRadius: '8px',
+                          maxHeight: '200px',
+                          overflow: 'hidden',
+                          border: '1px solid var(--border)',
+                          position: 'relative'
+                        }}>
+                          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                            {pendingAgentSpec.system_prompt || 'O núcleo da inteligência está sendo formatado...'}
+                          </div>
+                          <div style={{ 
+                            position: 'absolute', bottom: 0, left: 0, right: 0, 
+                            height: '40px', background: 'linear-gradient(to bottom, transparent, var(--bg-sidebar))' 
+                          }} />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      padding: '60px 40px', textAlign: 'center', 
+                      color: 'var(--text-muted)', 
+                      border: '2px dashed var(--border)', 
+                      borderRadius: '16px',
+                      background: 'rgba(255,255,255,0.02)'
+                    }}>
+                      <div style={{ position: 'relative', width: 'fit-content', margin: '0 auto 20px' }}>
+                        <Bot size={48} style={{ opacity: 0.15 }} />
+                        <Sparkles size={20} style={{ position: 'absolute', top: -5, right: -5, color: 'var(--accent)', opacity: 0.4 }} />
+                      </div>
+                      <h5 style={{ color: 'var(--text-primary)', marginBottom: '8px', fontSize: '0.95rem' }}>Pronto para projetar</h5>
+                      <p style={{ fontSize: '0.8rem', lineHeight: '1.5', maxWidth: '240px', margin: '0 auto' }}>
+                        Descreva as funções do novo especialista no chat à direita para começar a construção.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {pendingAgentSpec && !isStreaming && (
+                  <div style={{ 
+                    display: 'flex', gap: '12px', alignItems: 'center', 
+                    padding: '14px 18px', background: 'var(--accent-dim)', 
+                    borderRadius: '12px', border: '1px solid var(--accent)',
+                    color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 600
+                  }}>
+                    <div style={{ background: 'var(--accent)', color: '#fff', borderRadius: '50%', padding: '4px' }}>
+                      <CheckCircle2 size={14} />
+                    </div>
+                    <span>Projeto finalizado! Clique em "Usar este Especialista" no topo.</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Patch error banner */}
+            {patchError.length > 0 && (
+              <div style={{ padding: '8px 14px', background: 'rgba(239,68,68,0.1)', borderTop: '1px solid rgba(239,68,68,0.3)', fontSize: '0.72rem', color: '#f87171', flexShrink: 0 }}>
+                <Info size={11} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                {patchError.length} trecho(s) não encontrado(s) para aplicar. Peça à IA para corrigir.
+              </div>
+            )}
+          </div>
 
           {/* RIGHT: Chat Panel */}
           <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-card)' }}>
@@ -501,7 +649,9 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                     {m.role === 'assistant' ? (
                       (() => {
                         const patch = extractPatchJSON(m.content);
-                        if (patch) {
+                        const spec = extractAgentSpecJSON(m.content);
+
+                        if (patch && mode === 'edit') {
                           // Render a clean summary card for patch responses
                           return (
                             <div>
@@ -524,6 +674,22 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                             </div>
                           );
                         }
+                        
+                        if (spec && mode === 'create') {
+                          return (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', color: 'var(--accent)', fontWeight: 700, fontSize: '0.8rem' }}>
+                                <Sparkles size={14} />
+                                Especialista Projetado!
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{spec.name} ({spec.emoji}) foi configurado com sucesso.</div>
+                              <div style={{ marginTop: '10px', fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                ← Confira o preview completo no painel esquerdo
+                              </div>
+                            </div>
+                          );
+                        }
+
                         return (
                           <div dangerouslySetInnerHTML={{ __html: m.content.replace(/\n/g, '<br/>').replace(/```[\s\S]*?```/g, '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
                         );

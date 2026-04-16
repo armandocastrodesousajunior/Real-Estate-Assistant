@@ -197,16 +197,17 @@ async def prompt_assistant_chat(
     current_user: User = Depends(get_current_user),
     workspace: Workspace = Depends(get_current_workspace)
 ):
-    # 1. Carrega o prompt base do especialista
+    # 1. Carrega o prompt base do especialista baseado no modo
     base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    logic_path = os.path.join(base_path, "agents", "prompts", "internal", "prompt_builder_logic.md")
+    logic_file = "agent_creator_logic.md" if req.mode == "create" else "prompt_editor_logic.md"
+    logic_path = os.path.join(base_path, "agents", "prompts", "internal", logic_file)
     
     try:
         with open(logic_path, "r", encoding="utf-8") as f:
             system_prompt = f.read()
     except Exception as e:
-        logger.error(f"Erro ao carregar prompt_builder_logic.md: {e}")
-        system_prompt = "Você é um especialista em Prompts para Agentes de IA."
+        logger.error(f"Erro ao carregar {logic_file}: {e}")
+        system_prompt = "Você é um especialista em Agentes de IA."
 
     # 2. Carrega exemplos e injeta no prompt
     examples_content = ""

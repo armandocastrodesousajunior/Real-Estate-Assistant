@@ -7,6 +7,7 @@ import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
 import AgentIcon from '../components/AgentIcon'
 import PromptAssistant from '../components/PromptAssistant/PromptAssistant'
+import type { AgentSpec } from '../types/agent'
 
 interface Message { role: string; content: string; agentSlug?: string; agentName?: string; agentEmoji?: string; metadata?: any }
 interface Conversation { id: number; session_id: string; title?: string; message_count: number; updated_at: string }
@@ -804,12 +805,20 @@ Triagem inteligente com no máximo uma pergunta objetiva por vez.
         mode={promptAssistantMode}
         currentPrompt={promptAssistantMode === 'edit' ? editedPrompt : newAgentData.system_prompt}
         chatContext={activeChatContext}
-        onApply={(generatedPrompt) => {
+        onApply={(generatedData) => {
           if (promptAssistantMode === 'edit') {
-            setEditedPrompt(generatedPrompt);
+            setEditedPrompt(generatedData as string);
             setHasUnsavedChanges(true);
           } else {
-            setNewAgentData({...newAgentData, system_prompt: generatedPrompt});
+            const spec = generatedData as AgentSpec;
+            setNewAgentData({
+              ...newAgentData,
+              name: spec.name || newAgentData.name,
+              description: spec.description || newAgentData.description,
+              emoji: spec.emoji || newAgentData.emoji,
+              slug: spec.slug || newAgentData.slug,
+              system_prompt: spec.system_prompt || newAgentData.system_prompt,
+            });
           }
           setIsPromptAssistantOpen(false);
         }}
