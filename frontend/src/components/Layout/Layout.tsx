@@ -2,7 +2,8 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import {
   LayoutDashboard, Building2, Bot, Users, LogOut, Activity, Home,
-  ChevronDown, ChevronUp, Wrench, Settings, Building, SwitchCamera
+  ChevronDown, ChevronUp, Wrench, Settings, Building, SwitchCamera,
+  MoreVertical
 } from 'lucide-react'
 import { workspacesAPI, usersAPI } from '../../services/api'
 import { useEffect } from 'react'
@@ -22,7 +23,6 @@ const navItems = [
     ]
   },
   { to: '/logs', icon: Activity, label: 'System Logs' },
-  { to: '/settings', icon: Settings, label: 'Configurações' },
 ]
 
 export default function Layout() {
@@ -32,6 +32,7 @@ export default function Layout() {
   )
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false)
   const [isManageModalOpen, setIsManageModalOpen] = useState(false)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [user, setUser] = useState<any>(null)
   
   const navigate = useNavigate()
@@ -49,7 +50,6 @@ export default function Layout() {
       setWorkspaces(wsRes.data)
       setUser(uRes.data)
       
-      // Persiste para uso rápido em outros lugares (opcional, mas bom manter sync)
       localStorage.setItem('rea_user_workspaces', JSON.stringify(wsRes.data))
       
       if (!currentWorkspaceId && wsRes.data.length > 0) {
@@ -180,19 +180,38 @@ export default function Layout() {
 
         <div className="sidebar-footer">
           <div className="user-info">
-            <div className="user-avatar">A</div>
-            <div style={{ flex: 1 }}>
-              <div className="user-name">Admin</div>
-              <div className="user-email">admin@realtyai.com</div>
+            <div className="user-avatar">
+              {user?.full_name?.charAt(0) || 'U'}
             </div>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={handleLogout}
-              title="Sair"
-              style={{ padding: '6px', minWidth: 'auto' }}
-            >
-              <LogOut size={15} />
-            </button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.full_name || 'Carregando...'}
+              </div>
+              <div className="user-email" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.email}
+              </div>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                style={{ padding: '6px', minWidth: 'auto' }}
+              >
+                <MoreVertical size={16} />
+              </button>
+
+              {isUserMenuOpen && (
+                <div className="user-menu-dropdown">
+                  <button onClick={() => { setIsUserMenuOpen(false); navigate('/settings'); }}>
+                    <Settings size={14} /> Configurações
+                  </button>
+                  <div className="dropdown-divider" />
+                  <button onClick={handleLogout} className="text-error">
+                    <LogOut size={14} /> Sair
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </aside>

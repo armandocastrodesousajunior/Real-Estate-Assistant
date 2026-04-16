@@ -257,11 +257,15 @@ async def prompt_assistant_chat(
 
     # 4. Stream
     async def event_stream():
+        # Preferência por configurações do workspace
+        model = workspace.prompt_assistant_model if (workspace and workspace.prompt_assistant_model) else settings.DEFAULT_PROMPT_ASSISTANT_MODEL
+        temp = workspace.prompt_assistant_temperature if (workspace and workspace.prompt_assistant_temperature is not None) else settings.DEFAULT_PROMPT_ASSISTANT_TEMPERATURE
+
         try:
             async for chunk in openrouter.chat_completion_stream(
-                model=settings.SUPERVISOR_MODEL,
+                model=model,
                 messages=messages,
-                temperature=0.5,
+                temperature=temp,
                 max_tokens=2048,
                 api_key=current_user.openrouter_key
             ):

@@ -79,7 +79,7 @@ async def chat(
     if request.agent_slug:
         routing_result = {"slug": request.agent_slug, "debug": {"reason": "Chat Direto Playground"}}
     else:
-        routing_result = await route_to_agent(db, request.message, history, workspace_id=workspace.id, api_key=current_user.openrouter_key)
+        routing_result = await route_to_agent(db, request.message, history, workspace_id=workspace.id, api_key=current_user.openrouter_key, workspace=workspace)
 
     initial_agent_slug = routing_result["slug"]
     agent_slug = initial_agent_slug
@@ -125,7 +125,8 @@ async def chat(
                     context=current_redirect_context, 
                     trace_log=step_log,
                     workspace_id=workspace.id,
-                    api_key=current_user.openrouter_key
+                    api_key=current_user.openrouter_key,
+                    workspace=workspace
                 ):
                     full_response.append(chunk)
                     yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'

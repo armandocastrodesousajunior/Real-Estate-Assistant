@@ -9,6 +9,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.workspace import Workspace
 from sqlalchemy.orm import selectinload
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -20,6 +21,12 @@ class WorkspaceResponse(BaseModel):
     name: str
     slug: str
     owner_id: int
+    supervisor_model: Optional[str] = None
+    supervisor_temperature: Optional[float] = None
+    prompt_assistant_model: Optional[str] = None
+    prompt_assistant_temperature: Optional[float] = None
+    repair_model: Optional[str] = None
+    repair_temperature: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -104,7 +111,13 @@ async def get_workspace_detail(
     return workspace
 
 class WorkspaceUpdate(BaseModel):
-    name: str
+    name: Optional[str] = None
+    supervisor_model: Optional[str] = None
+    supervisor_temperature: Optional[float] = None
+    prompt_assistant_model: Optional[str] = None
+    prompt_assistant_temperature: Optional[float] = None
+    repair_model: Optional[str] = None
+    repair_temperature: Optional[float] = None
 
 @router.put("/{workspace_id}", response_model=WorkspaceResponse)
 async def update_workspace(
@@ -121,8 +134,16 @@ async def update_workspace(
     if not workspace:
         raise HTTPException(status_code=403, detail="Apenas o dono pode editar o workspace")
     
-    workspace.name = data.name
-    workspace.slug = data.name.lower().replace(" ", "-") # Atualiza slug também
+    if data.name:
+        workspace.name = data.name
+        workspace.slug = data.name.lower().replace(" ", "-")
+        
+    if data.supervisor_model is not None: workspace.supervisor_model = data.supervisor_model
+    if data.supervisor_temperature is not None: workspace.supervisor_temperature = data.supervisor_temperature
+    if data.prompt_assistant_model is not None: workspace.prompt_assistant_model = data.prompt_assistant_model
+    if data.prompt_assistant_temperature is not None: workspace.prompt_assistant_temperature = data.prompt_assistant_temperature
+    if data.repair_model is not None: workspace.repair_model = data.repair_model
+    if data.repair_temperature is not None: workspace.repair_temperature = data.repair_temperature
     
     await db.commit()
     await db.refresh(workspace)

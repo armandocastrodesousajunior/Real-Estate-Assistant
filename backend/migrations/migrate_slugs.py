@@ -1,7 +1,7 @@
-import sqlite3
+from utils import get_db_connection
 
 def run():
-    conn = sqlite3.connect('database/database.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # 1. MIGRAR WORKSPACES

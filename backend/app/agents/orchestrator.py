@@ -12,6 +12,7 @@ from loguru import logger
 import os
 from app.core.config import settings
 from app.models.tool import Tool, agent_tools
+from app.models.workspace import Workspace
 from app.core.tools_registry import get_tool_by_slug, format_tools_for_prompt
 
 
@@ -93,13 +94,20 @@ async def route_to_agent(
     user_message: str,
     history: List[Dict[str, str]],
     workspace_id: int,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    workspace: Optional[Workspace] = None
 ) -> Dict:
     """O Supervisor analisa a mensagem e retorna o slug e dados de debug"""
     fallback = {"slug": "customer_service", "debug": {}}
     
-    # Roteamento agora usa configurações internas (SUPERVISOR_MODEL no .env)
-    # Não depende mais de registro na tabela 'agents'
+    # Se o objeto workspace não foi passado, buscamos (embora o ideal seja vir do router)
+    if not workspace:
+        res = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        workspace = res.scalar_one_or_none()
+
+    # Roteamento agora usa configurações do workspace ou internas do .env
+    model = workspace.supervisor_model if (workspace and workspace.supervisor_model) else settings.DEFAULT_SUPERVISOR_MODEL
+    temp = workspace.supervisor_temperature if (workspace and workspace.supervisor_temperature is not None) else settings.DEFAULT_SUPERVISOR_TEMPERATURE
 
     # Histórico resumido para o supervisor (só últimas 3 trocas)
     recent = history[-6:] if len(history) > 6 else history
@@ -153,8 +161,8 @@ Qual agente deve responder?"""
         raw_output = await openrouter.simple_complete(
             system_prompt=full_system,
             user_message=routing_message,
-            model=settings.SUPERVISOR_MODEL,
-            temperature=settings.SUPERVISOR_TEMPERATURE,
+            model=model,
+            temperature=temp,
             max_tokens=300,
             api_key=api_key
         )
@@ -168,7 +176,7 @@ Qual agente deve responder?"""
             # TENTA REPARO AUTOMÁTICO DO SUPERVISOR
             logger.warning(f"Falha ao decodificar JSON do Supervisor. Tentando reparo interno.")
             try:
-                repaired_data = await repair_agent_output(clean_json, repair_type="supervisor", api_key=api_key)
+                repaired_data = await repair_agent_output(clean_json, repair_type="supervisor", api_key=api_key, workspace=workspace)
                 data = repaired_data
             except:
                 # Fallback se o reparo falhar mas o slug estiver na string
@@ -202,7 +210,7 @@ Qual agente deve responder?"""
         logger.warning(f"Supervisor routing failed: {e}. Defaulting to customer_service.")
         return fallback
 
-async def repair_agent_output(broken_content: str, repair_type: str = "expert", api_key: Optional[str] = None) -> Dict:
+async def repair_agent_output(broken_content: str, repair_type: str = "expert", api_key: Optional[str] = None, workspace: Optional[Workspace] = None) -> Dict:
     """Usa uma IA secundária para envolpar um texto puro no formato JSON exigido (expert ou supervisor)"""
     logger.info(f"Iniciando reparo de JSON tipo '{repair_type}' para conteúdo malformado.")
     
@@ -215,12 +223,15 @@ async def repair_agent_output(broken_content: str, repair_type: str = "expert", 
              return {"selected_agent": "agente_atendimento_inicial", "reason": "Erro no reparo"}
         return {"type": "response", "response": {"output": broken_content}}
 
+    model = workspace.repair_model if (workspace and workspace.repair_model) else settings.DEFAULT_REPAIR_MODEL
+    temp = workspace.repair_temperature if (workspace and workspace.repair_temperature is not None) else settings.DEFAULT_REPAIR_TEMPERATURE
+
     try:
         raw_repair = await openrouter.simple_complete(
             system_prompt=system_repair,
             user_message=f"CONTEÚDO PARA REPARAR:\n---\n{broken_content}\n---",
-            model=settings.SUPERVISOR_MODEL,
-            temperature=0.1,
+            model=model,
+            temperature=temp,
             max_tokens=1000,
             api_key=api_key
         )
@@ -258,7 +269,8 @@ async def run_agent_stream(
     context: Optional[str] = None,
     trace_log: Optional[Dict] = None,
     workspace_id: Optional[int] = None,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    workspace: Optional[Workspace] = None
 ) -> AsyncGenerator[str, None]:
     """Executa o agente e retorna um generator de streaming"""
     if not workspace_id:
@@ -519,7 +531,7 @@ async def run_agent_stream(
                 
                 # TENTA REPARO SE FALHAR O REDIRECIONAMENTO COMUM
                 try:
-                    repaired = await repair_agent_output(buffer, api_key=api_key)
+                    repaired = await repair_agent_output(buffer, api_key=api_key, workspace=workspace)
                     if repaired.get("type") == "redirect":
                         rd = repaired.get("redirect", {})
                         raise AgentRedirectSignal(rd.get("slug"), rd.get("reason"), raw_response=buffer)
@@ -534,7 +546,7 @@ async def run_agent_stream(
         # OU SE O BUFFER AINDA TEM CONTEÚDO QUE NÃO FOI 'YIELDADO'
         if not is_redirect and (state == 0 or state == 1):
              # O Agente apenas falou texto puro ou quebrou o JSON
-             repaired = await repair_agent_output(buffer, api_key=api_key)
+             repaired = await repair_agent_output(buffer, api_key=api_key, workspace=workspace)
              yield repaired.get("response", {}).get("output", buffer)
 
         # Atualiza estatísticas do agente
@@ -567,7 +579,8 @@ async def run_agent_complete(
     history: List[Dict[str, str]],
     context: Optional[str] = None,
     workspace_id: Optional[int] = None,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    workspace: Optional[Workspace] = None
 ) -> Dict:
     """Executa o agente e retorna a resposta completa (sem streaming)"""
     if not workspace_id:
@@ -643,7 +656,7 @@ async def run_agent_complete(
                 final_content = content
         except:
             # Se o JSON falhar, tenta o reparador interno
-            repaired = await repair_agent_output(content, api_key=api_key)
+            repaired = await repair_agent_output(content, api_key=api_key, workspace=workspace)
             final_content = repaired.get("response", {}).get("output", content)
 
         agent.total_calls += 1

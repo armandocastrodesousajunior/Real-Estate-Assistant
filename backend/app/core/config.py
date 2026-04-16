@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./real_estate_assistant.db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./database/database.db"
 
     # JWT
     JWT_SECRET_KEY: str = "rea-super-secret-key-change-in-production"
@@ -22,15 +22,22 @@ class Settings(BaseSettings):
     ADMIN_NAME: str = "Administrador"
 
     # OpenRouter
-    OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_SITE_URL: str = "http://localhost:5173"
     OPENROUTER_SITE_NAME: str = "Real-Estate-Assistant"
+    
+    # Internal Agents Defaults
+    DEFAULT_SUPERVISOR_MODEL: str = "openai/gpt-4o-mini"
+    DEFAULT_SUPERVISOR_TEMPERATURE: float = 0.1
+    
+    DEFAULT_PROMPT_ASSISTANT_MODEL: str = "openai/gpt-4o-mini"
+    DEFAULT_PROMPT_ASSISTANT_TEMPERATURE: float = 0.5
+    
+    DEFAULT_REPAIR_MODEL: str = "openai/gpt-4o-mini"
+    DEFAULT_REPAIR_TEMPERATURE: float = 0.1
 
     # Agents
     MAX_AGENT_HOPS: int = 2
-    SUPERVISOR_MODEL: str = "openai/gpt-4o-mini"
-    SUPERVISOR_TEMPERATURE: float = 0.1
 
     # Uploads
     UPLOAD_DIR: str = "uploads"

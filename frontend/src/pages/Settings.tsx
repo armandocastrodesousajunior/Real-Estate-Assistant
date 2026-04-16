@@ -48,7 +48,7 @@ export default function Settings() {
   if (loading) return <div className="loading-center"><div className="spinner spinner-lg"></div></div>
 
   return (
-    <div className="page-container">
+    <>
       <div className="page-header">
         <div>
           <h1 className="page-header-title">Configurações do Perfil</h1>
@@ -115,6 +115,6 @@ export default function Settings() {
           </form>
         </div>
       </div>
-    </div>
+    </>
   )
 }

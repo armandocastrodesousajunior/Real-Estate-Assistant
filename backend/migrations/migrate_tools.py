@@ -1,23 +1,13 @@
-import sqlite3
-import os
+from utils import get_db_connection
 
-def run_migration():
-    db_path = 'database/database.db'
-    if not os.path.exists(db_path):
-        print(f"Database not found at {db_path}")
-        return
-
-    conn = sqlite3.connect(db_path)
+def run():
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        # DROP THE INCORRECT TABLES
-        cursor.execute("DROP TABLE IF EXISTS tools")
-        cursor.execute("DROP TABLE IF EXISTS agent_tools")
-        
-        # Create tools table correctly
+        # Create tools table
         cursor.execute("""
-        CREATE TABLE tools (
+        CREATE TABLE IF NOT EXISTS tools (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             slug VARCHAR(50) UNIQUE NOT NULL,
             name VARCHAR(100) NOT NULL,
@@ -30,9 +20,9 @@ def run_migration():
         )
         """)
         
-        # Create agent_tools table correctly
+        # Create agent_tools table
         cursor.execute("""
-        CREATE TABLE agent_tools (
+        CREATE TABLE IF NOT EXISTS agent_tools (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             agent_slug VARCHAR(50) NOT NULL,
             tool_slug VARCHAR(50) NOT NULL,
@@ -41,11 +31,11 @@ def run_migration():
         """)
         
         conn.commit()
-        print("Migração de ferramentas RESETADA e recriada com sucesso!")
-    except sqlite3.OperationalError as e:
+        print("Migração de ferramentas concluída com sucesso!")
+    except Exception as e:
         print(f"Erro na migração: {e}")
     finally:
         conn.close()
 
 if __name__ == '__main__':
-    run_migration()
+    run()

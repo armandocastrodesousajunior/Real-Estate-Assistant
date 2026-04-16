@@ -745,3 +745,52 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;height:4p
   letter-spacing: 0.05em;
   margin-left: 8px;
 }
+
+/* ── USER MENU DROPDOWN ── */
+.user-menu-dropdown {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  width: 180px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.user-menu-dropdown button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: transparent;
+  transition: var(--transition);
+  text-align: left;
+}
+
+.user-menu-dropdown button:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.user-menu-dropdown .dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+
+.user-menu-dropdown button.text-error {
+  color: var(--error);
+}
+
+.user-menu-dropdown button.text-error:hover {
+  background: var(--error-dim);
+}

@@ -11,7 +11,9 @@ import Leads from './pages/Leads'
 import Logs from './pages/Logs'
 import ToolsPage from './pages/ToolsPage'
 import Settings from './pages/Settings'
+import WorkspaceSettings from './pages/WorkspaceSettings'
 import SuperAdmin from './pages/SuperAdmin'
+import SettingsLayout from './components/Layout/SettingsLayout'
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('rea_token'))
@@ -48,7 +50,16 @@ function App() {
           <Route path="playground/tools" element={<ToolsPage />} />
           <Route path="leads" element={<Leads />} />
           <Route path="logs" element={<Logs />} />
-          <Route path="settings" element={<Settings />} />
+        </Route>
+
+        {/* Rotas de Configuração (Layout Próprio) */}
+        <Route 
+          path="/settings" 
+          element={isLoggedIn ? <SettingsLayout /> : <Navigate to="/login" replace />}
+        >
+          <Route index element={<Settings />} />
+          <Route path="workspace" element={<WorkspaceSettings />} />
+          <Route path="tokens" element={<div className="page-container"><h2>Tokens & Billing</h2><p>Coming soon...</p></div>} />
         </Route>
 
         {/* Rotas de Administração Global (Painel Separado) */}

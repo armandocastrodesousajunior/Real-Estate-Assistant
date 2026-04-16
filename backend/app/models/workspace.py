@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Table, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
@@ -27,6 +27,16 @@ class Workspace(Base):
     # Meta
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Internal AI Configuration (Overrides .env defaults)
+    supervisor_model = Column(String(100), nullable=True)
+    supervisor_temperature = Column(Float, nullable=True)
+    
+    prompt_assistant_model = Column(String(100), nullable=True)
+    prompt_assistant_temperature = Column(Float, nullable=True)
+    
+    repair_model = Column(String(100), nullable=True)
+    repair_temperature = Column(Float, nullable=True)
 
     # Relationships
     owner = relationship("User", back_populates="owned_workspaces")
