@@ -5,26 +5,26 @@ from app.core.config import settings
 from loguru import logger
 
 
+class OpenRouterError(Exception):
+    """Exceção customizada para erros da API OpenRouter"""
+    def __init__(self, message: str, status_code: Optional[int] = None, detail: Any = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.detail = detail
+
+
 class OpenRouterClient:
     """Client async para a API do OpenRouter (compatível com OpenAI)"""
 
     BASE_URL = "https://openrouter.ai/api/v1"
 
-    def __init__(self):
-        self._api_key: Optional[str] = settings.OPENROUTER_API_KEY
-
-    @property
-    def api_key(self) -> Optional[str]:
-        return self._api_key
-
-    def set_api_key(self, key: str):
-        self._api_key = key
-
-    def _get_headers(self) -> Dict[str, str]:
-        if not self._api_key:
-            raise ValueError("OpenRouter API key não configurada. Acesse Configurações > OpenRouter.")
+    def _get_headers(self, override_key: Optional[str] = None) -> Dict[str, str]:
+        key = override_key or settings.OPENROUTER_API_KEY
+        if not key:
+            raise OpenRouterError("OpenRouter API key não configurada. Verifique suas configurações de perfil ou o arquivo .env.")
+        
         return {
-            "Authorization": f"Bearer {self._api_key}",
+            "Authorization": f"Bearer {key}",
             "HTTP-Referer": settings.OPENROUTER_SITE_URL,
             "X-Title": settings.OPENROUTER_SITE_NAME,
             "Content-Type": "application/json",
@@ -39,7 +39,7 @@ class OpenRouterClient:
         top_p: float = 1.0,
         frequency_penalty: float = 0.0,
         presence_penalty: float = 0.0,
-        stream: bool = False,
+        api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Chamada síncrona (coleta resposta completa)"""
         payload = {
@@ -53,13 +53,28 @@ class OpenRouterClient:
             "stream": False,
         }
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.BASE_URL}/chat/completions",
-                headers=self._get_headers(),
-                json=payload,
-            )
-            response.raise_for_status()
-            return response.json()
+            try:
+                response = await client.post(
+                    f"{self.BASE_URL}/chat/completions",
+                    headers=self._get_headers(api_key),
+                    json=payload,
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                error_detail = {}
+                try:
+                    error_detail = e.response.json()
+                except:
+                    pass
+                
+                msg = error_detail.get("error", {}).get("message", str(e))
+                logger.error(f"OpenRouter API Error ({e.response.status_code}): {msg}")
+                raise OpenRouterError(f"Erro na API OpenRouter: {msg}", status_code=e.response.status_code, detail=error_detail)
+            except Exception as e:
+                if isinstance(e, OpenRouterError): raise
+                logger.error(f"OpenRouter Client Error: {e}")
+                raise OpenRouterError(f"Erro de conexão com OpenRouter: {str(e)}")
 
     async def chat_completion_stream(
         self,
@@ -70,6 +85,7 @@ class OpenRouterClient:
         top_p: float = 1.0,
         frequency_penalty: float = 0.0,
         presence_penalty: float = 0.0,
+        api_key: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming de resposta (Server-Sent Events)"""
         payload = {
@@ -83,33 +99,52 @@ class OpenRouterClient:
             "stream": True,
         }
         async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST",
-                f"{self.BASE_URL}/chat/completions",
-                headers=self._get_headers(),
-                json=payload,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            break
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{self.BASE_URL}/chat/completions",
+                    headers=self._get_headers(api_key),
+                    json=payload,
+                ) as response:
+                    if response.status_code != 200:
+                        # Erro síncrono antes do stream começar
+                        await response.aread()
+                        error_detail = {}
                         try:
-                            chunk = json.loads(data)
-                            delta = chunk["choices"][0].get("delta", {})
-                            content = delta.get("content", "")
-                            if content:
-                                yield content
-                        except (json.JSONDecodeError, KeyError, IndexError):
-                            continue
+                            error_detail = response.json()
+                        except:
+                            pass
+                        msg = error_detail.get("error", {}).get("message", f"HTTP {response.status_code}")
+                        raise OpenRouterError(f"Erro no Stream OpenRouter: {msg}", status_code=response.status_code, detail=error_detail)
 
-    async def get_available_models(self) -> List[Dict[str, Any]]:
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data = line[6:]
+                            if data == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data)
+                                delta = chunk["choices"][0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    yield content
+                            except (json.JSONDecodeError, KeyError, IndexError):
+                                continue
+            except httpx.HTTPStatusError as e:
+                # Caso ocorra erro durante a iteração do stream (raro)
+                logger.error(f"OpenRouter Stream HTTP Error: {e}")
+                raise OpenRouterError(f"Erro no fluxo do OpenRouter: {str(e)}")
+            except Exception as e:
+                if isinstance(e, OpenRouterError): raise
+                logger.error(f"OpenRouter Stream Exception: {e}")
+                raise OpenRouterError(f"Erro de conexão no stream: {str(e)}")
+
+    async def get_available_models(self, api_key: Optional[str] = None) -> List[Dict[str, Any]]:
         """Lista modelos disponíveis no OpenRouter"""
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(
                 f"{self.BASE_URL}/models",
-                headers=self._get_headers(),
+                headers=self._get_headers(api_key),
             )
             response.raise_for_status()
             data = response.json()
@@ -122,6 +157,7 @@ class OpenRouterClient:
         model: str,
         temperature: float = 0.3,
         max_tokens: int = 500,
+        api_key: Optional[str] = None,
     ) -> str:
         """Convenience method para completions simples (retorna só o texto)"""
         result = await self.chat_completion(
@@ -132,6 +168,7 @@ class OpenRouterClient:
             ],
             temperature=temperature,
             max_tokens=max_tokens,
+            api_key=api_key,
         )
         return result["choices"][0]["message"]["content"].strip()
 

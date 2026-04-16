@@ -5,7 +5,7 @@ import json
 import re
 import time
 
-from app.agents.openrouter import openrouter
+from app.agents.openrouter import openrouter, OpenRouterError
 from app.models.agent import Agent
 from app.models.prompt import Prompt
 from loguru import logger
@@ -33,25 +33,26 @@ def extract_json_block(text: str) -> str:
         return text
 
 
-async def get_agent_config(db: AsyncSession, slug: str) -> Optional[Agent]:
-    result = await db.execute(select(Agent).where(Agent.slug == slug, Agent.is_active == True))
+async def get_agent_config(db: AsyncSession, slug: str, workspace_id: int) -> Optional[Agent]:
+    result = await db.execute(select(Agent).where(Agent.slug == slug, Agent.is_active == True, Agent.workspace_id == workspace_id))
     return result.scalar_one_or_none()
 
 
-async def get_agent_prompt(db: AsyncSession, slug: str) -> Optional[str]:
+async def get_agent_prompt(db: AsyncSession, slug: str, workspace_id: int) -> Optional[str]:
     result = await db.execute(
-        select(Prompt).where(Prompt.agent_slug == slug, Prompt.is_active == True)
+        select(Prompt).where(Prompt.agent_slug == slug, Prompt.is_active == True, Prompt.workspace_id == workspace_id)
         .order_by(Prompt.version.desc())
     )
     prompt = result.scalar_one_or_none()
     return prompt.system_prompt if prompt else None
 
 
-async def get_agents_directory(db: AsyncSession, exclude_slug: str) -> tuple[str, list[str]]:
-    """Busca todos os agentes ativos exceto o atual e retorna o diretório Markdown e a lista de slugs"""
+async def get_agents_directory(db: AsyncSession, workspace_id: int, exclude_slug: str) -> tuple[str, list[str]]:
+    """Busca todos os agentes ativos no workspace exceto o atual e retorna o diretório Markdown e a lista de slugs"""
     result = await db.execute(
         select(Agent).where(
             Agent.is_active == True, 
+            Agent.workspace_id == workspace_id,
             Agent.slug != "supervisor",
             Agent.slug != exclude_slug
         )
@@ -91,6 +92,8 @@ async def route_to_agent(
     db: AsyncSession,
     user_message: str,
     history: List[Dict[str, str]],
+    workspace_id: int,
+    api_key: Optional[str] = None
 ) -> Dict:
     """O Supervisor analisa a mensagem e retorna o slug e dados de debug"""
     fallback = {"slug": "customer_service", "debug": {}}
@@ -108,7 +111,7 @@ async def route_to_agent(
     full_system = get_internal_prompt("supervisor_logic.md")
     
     # Injeta diretório dinâmico e JSON Schema de todos os agentes especialistas
-    directory, slugs = await get_agents_directory(db, exclude_slug="supervisor")
+    directory, slugs = await get_agents_directory(db, workspace_id, exclude_slug="supervisor")
     
     if "{{AGENTS_DIRECTORY}}" in full_system:
         full_system = full_system.replace("{{AGENTS_DIRECTORY}}", directory)
@@ -152,7 +155,8 @@ Qual agente deve responder?"""
             user_message=routing_message,
             model=settings.SUPERVISOR_MODEL,
             temperature=settings.SUPERVISOR_TEMPERATURE,
-            max_tokens=300
+            max_tokens=300,
+            api_key=api_key
         )
         
         # Extração robusta do JSON
@@ -164,7 +168,7 @@ Qual agente deve responder?"""
             # TENTA REPARO AUTOMÁTICO DO SUPERVISOR
             logger.warning(f"Falha ao decodificar JSON do Supervisor. Tentando reparo interno.")
             try:
-                repaired_data = await repair_agent_output(clean_json, repair_type="supervisor")
+                repaired_data = await repair_agent_output(clean_json, repair_type="supervisor", api_key=api_key)
                 data = repaired_data
             except:
                 # Fallback se o reparo falhar mas o slug estiver na string
@@ -190,11 +194,15 @@ Qual agente deve responder?"""
             
         return {"slug": "customer_service", "debug": debug_info}
         
+    except OpenRouterError as e:
+        logger.warning(f"Supervisor routing failed (OpenRouter Error): {e}")
+        # Se for erro de API (chave, saldo), não faz sentido o fallback silencioso
+        raise
     except Exception as e:
         logger.warning(f"Supervisor routing failed: {e}. Defaulting to customer_service.")
         return fallback
 
-async def repair_agent_output(broken_content: str, repair_type: str = "expert") -> Dict:
+async def repair_agent_output(broken_content: str, repair_type: str = "expert", api_key: Optional[str] = None) -> Dict:
     """Usa uma IA secundária para envolpar um texto puro no formato JSON exigido (expert ou supervisor)"""
     logger.info(f"Iniciando reparo de JSON tipo '{repair_type}' para conteúdo malformado.")
     
@@ -213,7 +221,8 @@ async def repair_agent_output(broken_content: str, repair_type: str = "expert") 
             user_message=f"CONTEÚDO PARA REPARAR:\n---\n{broken_content}\n---",
             model=settings.SUPERVISOR_MODEL,
             temperature=0.1,
-            max_tokens=1000
+            max_tokens=1000,
+            api_key=api_key
         )
         
         # Extração robusta do JSON do reparo
@@ -248,15 +257,21 @@ async def run_agent_stream(
     history: List[Dict[str, str]],
     context: Optional[str] = None,
     trace_log: Optional[Dict] = None,
+    workspace_id: Optional[int] = None,
+    api_key: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
     """Executa o agente e retorna um generator de streaming"""
-    agent = await get_agent_config(db, agent_slug)
+    if not workspace_id:
+         yield "Workspace não especificado."
+         return
+
+    agent = await get_agent_config(db, agent_slug, workspace_id)
     if not agent:
         yield "Agente não disponível no momento."
         return
 
     # Parte A: Prompt do Banco (Editável)
-    system_prompt = await get_agent_prompt(db, agent_slug)
+    system_prompt = await get_agent_prompt(db, agent_slug, workspace_id)
     if not system_prompt:
         yield "Configuração do agente incompleta."
         return
@@ -265,7 +280,7 @@ async def run_agent_stream(
     internal_logic = get_internal_prompt("expert_logic.md")
     
     # Injeta catálogo dinâmico de agentes para o Handoff
-    directory, slugs = await get_agents_directory(db, agent_slug)
+    directory, slugs = await get_agents_directory(db, workspace_id, agent_slug)
     
     if "{{AGENTS_DIRECTORY}}" in internal_logic:
         internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
@@ -405,6 +420,7 @@ async def run_agent_stream(
             top_p=agent.top_p,
             frequency_penalty=agent.frequency_penalty,
             presence_penalty=agent.presence_penalty,
+            api_key=api_key
         ):
             if state == -1:
                 if trace_log is not None: trace_log["raw_ai_output"] += chunk
@@ -503,7 +519,7 @@ async def run_agent_stream(
                 
                 # TENTA REPARO SE FALHAR O REDIRECIONAMENTO COMUM
                 try:
-                    repaired = await repair_agent_output(buffer)
+                    repaired = await repair_agent_output(buffer, api_key=api_key)
                     if repaired.get("type") == "redirect":
                         rd = repaired.get("redirect", {})
                         raise AgentRedirectSignal(rd.get("slug"), rd.get("reason"), raw_response=buffer)
@@ -518,7 +534,7 @@ async def run_agent_stream(
         # OU SE O BUFFER AINDA TEM CONTEÚDO QUE NÃO FOI 'YIELDADO'
         if not is_redirect and (state == 0 or state == 1):
              # O Agente apenas falou texto puro ou quebrou o JSON
-             repaired = await repair_agent_output(buffer)
+             repaired = await repair_agent_output(buffer, api_key=api_key)
              yield repaired.get("response", {}).get("output", buffer)
 
         # Atualiza estatísticas do agente
@@ -536,6 +552,9 @@ async def run_agent_stream(
         raise
     except AgentToolCallSignal:
         raise
+    except OpenRouterError as e:
+        logger.error(f"OpenRouter Error for agent {agent_slug}: {e}")
+        yield f"\n\n❌ **Erro na API de IA:** {str(e)}"
     except Exception as e:
         logger.error(f"Agent {agent_slug} error: {e}")
         yield f"\n\n⚠️ Erro ao processar resposta: {str(e)}"
@@ -547,20 +566,25 @@ async def run_agent_complete(
     user_message: str,
     history: List[Dict[str, str]],
     context: Optional[str] = None,
+    workspace_id: Optional[int] = None,
+    api_key: Optional[str] = None
 ) -> Dict:
     """Executa o agente e retorna a resposta completa (sem streaming)"""
-    agent = await get_agent_config(db, agent_slug)
+    if not workspace_id:
+        return {"content": "Workspace não especificado.", "tokens": 0, "model": ""}
+
+    agent = await get_agent_config(db, agent_slug, workspace_id)
     if not agent:
         return {"content": "Agente não disponível.", "tokens": 0, "model": ""}
 
-    system_prompt = await get_agent_prompt(db, agent_slug)
+    system_prompt = await get_agent_prompt(db, agent_slug, workspace_id)
     if not system_prompt:
         return {"content": "Configuração incompleta.", "tokens": 0, "model": ""}
 
     # Parte B: Lógica Interna (Não Editável via UI - Carregada de Arquivo)
     internal_logic = get_internal_prompt("expert_logic.md")
     # Injeta catálogo dinâmico para o Handoff no run_agent_complete também
-    directory, slugs = await get_agents_directory(db, agent_slug)
+    directory, slugs = await get_agents_directory(db, workspace_id, agent_slug)
     if "{{AGENTS_DIRECTORY}}" in internal_logic:
         internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
 
@@ -600,6 +624,7 @@ async def run_agent_complete(
             messages=messages,
             temperature=agent.temperature,
             max_tokens=agent.max_tokens,
+            api_key=api_key
         )
         # Tenta Parsear o JSON da resposta completa
         try:
@@ -618,7 +643,7 @@ async def run_agent_complete(
                 final_content = content
         except:
             # Se o JSON falhar, tenta o reparador interno
-            repaired = await repair_agent_output(content)
+            repaired = await repair_agent_output(content, api_key=api_key)
             final_content = repaired.get("response", {}).get("output", content)
 
         agent.total_calls += 1
@@ -626,6 +651,9 @@ async def run_agent_complete(
         await db.commit()
 
         return {"content": final_content, "tokens": tokens, "model": agent.model}
+    except OpenRouterError as e:
+        logger.error(f"OpenRouter Error for agent {agent_slug} (complete): {e}")
+        return {"content": f"❌ **Erro na API de IA:** {str(e)}", "tokens": 0, "model": agent.model}
     except Exception as e:
         logger.error(f"Agent {agent_slug} complete error: {e}")
         return {"content": f"Erro: {str(e)}", "tokens": 0, "model": agent.model}

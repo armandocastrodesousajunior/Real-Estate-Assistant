@@ -17,7 +17,7 @@ from app.models.conversation import Conversation, Message  # noqa: F401
 from app.models.prompt import Prompt              # noqa: F401
 
 # Routers
-from app.routers import auth, properties, agents, prompts, chat, leads, logs, tools
+from app.routers import auth, properties, agents, prompts, chat, leads, logs, tools, workspaces, users, super_admin
 
 
 @asynccontextmanager
@@ -31,10 +31,9 @@ async def lifespan(app: FastAPI):
     os.makedirs(os.path.join(settings.UPLOAD_DIR, "properties"), exist_ok=True)
     logger.info(f"📁 Upload directory: {settings.UPLOAD_DIR}")
 
-    # Cria tabelas no banco
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("✅ Database tables created")
+    # Nota: A criação de tabelas agora é gerenciada pelo script de seed ou migrações
+    # para evitar problemas de greenlet no startup
+    logger.info("📡 Database connected")
 
     logger.info("✅ Real-Estate-Assistant API ready!")
     yield
@@ -128,6 +127,9 @@ app.include_router(chat.router,       prefix="/api/v1/chat",       tags=["💬 C
 app.include_router(leads.router,      prefix="/api/v1/leads",      tags=["👤 Leads"])
 app.include_router(logs.router,       prefix="/api/v1/logs",       tags=["📜 Logs"])
 app.include_router(tools.router,      prefix="/api/v1/tools",      tags=["🛠️ Ferramentas"])
+app.include_router(workspaces.router, prefix="/api/v1/workspaces", tags=["🏢 Workspaces"])
+app.include_router(users.router,      prefix="/api/v1/users",      tags=["👤 Usuários"])
+app.include_router(super_admin.router, prefix="/api/v1/superadmin", tags=["👑 Super Admin"])
 
 # ─── Root endpoints ───────────────────────────────────────────────────────────
 

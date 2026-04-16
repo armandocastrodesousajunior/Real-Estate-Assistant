@@ -1,14 +1,18 @@
-from sqlalchemy import Column, Integer, String, Float, Text, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Float, Text, Boolean, JSON, ForeignKey, UniqueConstraint
 from datetime import datetime
 from sqlalchemy import DateTime
 from app.core.database import Base
+from sqlalchemy.orm import relationship
 
 
 class Agent(Base):
     __tablename__ = "agents"
+    __table_args__ = (
+        UniqueConstraint('slug', 'workspace_id', name='uq_agent_slug_workspace'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    slug = Column(String(50), unique=True, index=True)  # ex: "supervisor", "property_finder"
+    slug = Column(String(50), index=True)  # ex: "supervisor", "property_finder"
     name = Column(String(100), nullable=False)
     description = Column(Text)
     emoji = Column(String(10), default="🤖")
@@ -34,3 +38,7 @@ class Agent(Base):
     # Meta
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Multi-Tenancy
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace = relationship("Workspace", back_populates="agents")

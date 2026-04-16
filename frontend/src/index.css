@@ -45,6 +45,12 @@
   --font-mono:    'JetBrains Mono', monospace;
   --font-sans:    'Inter', system-ui, sans-serif;
   --bg-sidebar:   #0C1528;
+  
+  /* ── ADMIN THEME ── */
+  --admin-accent:   #818CF8;
+  --admin-primary:  #6366F1;
+  --admin-bg-sidebar: #0F172A;
+  --admin-border:   rgba(129,140,248,0.15);
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -568,3 +574,174 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;height:4p
 
 /* ── PROMPT ASSISTANT FULLSCREEN ── */
 .modal-overlay.pa-fullscreen{padding:0;align-items:stretch}
+
+/* ── WORKSPACE SWITCHER ── */
+.workspace-switcher {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.workspace-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.workspace-current:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.workspace-icon {
+  width: 28px;
+  height: 28px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.workspace-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.workspace-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.workspace-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-chevron {
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+
+.workspace-chevron.open {
+  transform: rotate(180deg);
+}
+
+.workspace-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 14px;
+  right: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  padding: 6px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.workspace-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.workspace-option:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.workspace-option.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.workspace-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+
+.workspace-create-btn {
+  width: 100%;
+  padding: 10px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+}
+
+.workspace-create-btn:hover {
+  background: var(--primary-dim);
+}
+
+/* ── ADMIN SIDEBAR OVERRIDES ── */
+.sidebar.sidebar-admin {
+  background: linear-gradient(180deg, var(--admin-bg-sidebar) 0%, #020617 100%);
+  border-right: 1px solid var(--admin-border);
+}
+
+.sidebar-admin .logo-icon {
+  background: linear-gradient(135deg, var(--admin-accent), var(--admin-primary));
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+}
+
+.sidebar-admin .nav-item:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: #fff;
+}
+
+.sidebar-admin .nav-item.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(129, 140, 248, 0.1));
+  color: var(--admin-accent);
+  border-color: rgba(129, 140, 248, 0.25);
+}
+
+.sidebar-admin .nav-item.active::before {
+  background: var(--admin-accent);
+}
+
+.sidebar-admin .user-avatar {
+  background: linear-gradient(135deg, var(--admin-accent), var(--admin-primary));
+}
+
+.admin-badge {
+  background: var(--admin-primary);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 8px;
+}

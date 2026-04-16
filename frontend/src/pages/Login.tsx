@@ -20,9 +20,19 @@ export default function Login({ onLogin }: Props) {
     try {
       const { data } = await authAPI.login(email, password)
       localStorage.setItem('rea_token', data.access_token)
+      
+      // Salva os workspaces do usuário e define o primeiro como padrão
+      if (data.workspaces && data.workspaces.length > 0) {
+        localStorage.setItem('rea_user_workspaces', JSON.stringify(data.workspaces))
+        localStorage.setItem('rea_workspace_id', data.workspaces[0].id)
+      }
+
+      localStorage.setItem('rea_is_superadmin', String(data.is_superadmin))
+      
       onLogin()
       navigate('/dashboard')
-    } catch {
+    } catch (err) {
+      console.error(err)
       setError('Email ou senha inválidos. Verifique suas credenciais.')
     } finally {
       setLoading(false)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, JSON, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, JSON, Enum as SAEnum, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -86,3 +86,7 @@ class Property(Base):
 
     # Relacionamentos
     leads = relationship("Lead", back_populates="property", lazy="select")
+    
+    # Multi-Tenancy
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace = relationship("Workspace", back_populates="properties")

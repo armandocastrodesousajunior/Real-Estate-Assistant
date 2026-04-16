@@ -7,12 +7,14 @@ import json
 import os
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_workspace
 from app.core.config import settings
+from app.models.user import User
+from app.models.workspace import Workspace
 from app.models.agent import Agent
 from app.models.prompt import Prompt
 from app.schemas.chat import PromptSchema, PromptUpdate, PromptTest, PromptAssistantRequest
-from app.agents.openrouter import openrouter
+from app.agents.openrouter import openrouter, OpenRouterError
 from loguru import logger
 
 router = APIRouter()
@@ -24,9 +26,13 @@ router = APIRouter()
     summary="Listar todos os prompts",
     description="Retorna o prompt ativo de cada agente.",
 )
-async def list_prompts(db: AsyncSession = Depends(get_db), _: dict = Depends(get_current_user)):
+async def list_prompts(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     result = await db.execute(
-        select(Prompt).where(Prompt.is_active == True).order_by(Prompt.agent_slug)
+        select(Prompt).where(Prompt.is_active == True, Prompt.workspace_id == workspace.id).order_by(Prompt.agent_slug)
     )
     return [PromptSchema.model_validate(p) for p in result.scalars().all()]
 
@@ -37,15 +43,19 @@ async def list_prompts(db: AsyncSession = Depends(get_db), _: dict = Depends(get
     summary="Prompt do agente",
     description="Retorna o prompt ativo do agente especificado.",
 )
-async def get_prompt(agent_slug: str, db: AsyncSession = Depends(get_db), _: dict = Depends(get_current_user)):
+async def get_prompt(
+    agent_slug: str, 
+    db: AsyncSession = Depends(get_db), 
+    workspace: Workspace = Depends(get_current_workspace)
+):
     result = await db.execute(
         select(Prompt)
-        .where(Prompt.agent_slug == agent_slug, Prompt.is_active == True)
+        .where(Prompt.agent_slug == agent_slug, Prompt.is_active == True, Prompt.workspace_id == workspace.id)
         .order_by(Prompt.version.desc())
     )
     prompt = result.scalar_one_or_none()
     if not prompt:
-        raise HTTPException(status_code=404, detail="Prompt não encontrado")
+        raise HTTPException(status_code=404, detail="Prompt não encontrado neste workspace")
     return PromptSchema.model_validate(prompt)
 
 
@@ -59,16 +69,23 @@ async def update_prompt(
     agent_slug: str,
     data: PromptUpdate,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    # Verifica se o agente existe
-    agent_result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+    # Verifica se o agente existe no workspace
+    agent_result = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
     if not agent_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Agente não encontrado")
 
-    # Desativa a versão atual
+    # Desativa a versão atual no workspace
     current_result = await db.execute(
-        select(Prompt).where(Prompt.agent_slug == agent_slug, Prompt.is_active == True)
+        select(Prompt).where(
+            Prompt.agent_slug == agent_slug, 
+            Prompt.is_active == True,
+            Prompt.workspace_id == workspace.id
+        )
     )
     current = current_result.scalar_one_or_none()
     current_version = 1
@@ -81,6 +98,7 @@ async def update_prompt(
         agent_slug=agent_slug,
         version=current_version,
         is_active=True,
+        workspace_id=workspace.id,
         system_prompt=data.system_prompt,
         user_prompt_template=data.user_prompt_template,
         notes=data.notes,
@@ -98,11 +116,13 @@ async def update_prompt(
     description="Retorna todas as versões anteriores do prompt do agente.",
 )
 async def get_prompt_history(
-    agent_slug: str, db: AsyncSession = Depends(get_db), _: dict = Depends(get_current_user)
+    agent_slug: str, 
+    db: AsyncSession = Depends(get_db), 
+    workspace: Workspace = Depends(get_current_workspace)
 ):
     result = await db.execute(
         select(Prompt)
-        .where(Prompt.agent_slug == agent_slug)
+        .where(Prompt.agent_slug == agent_slug, Prompt.workspace_id == workspace.id)
         .order_by(Prompt.version.desc())
     )
     return [PromptSchema.model_validate(p) for p in result.scalars().all()]
@@ -111,16 +131,18 @@ async def get_prompt_history(
 @router.post(
     "/{agent_slug}/test",
     summary="Testar prompt",
-    description="Executa o prompt fornecido com uma mensagem de teste. Não salva nada no banco.",
 )
 async def test_prompt(
     agent_slug: str,
     data: PromptTest,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    # Busca modelo do agente, ou usa padrão
-    agent_result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+    # Busca modelo do agente no workspace, ou usa padrão
+    agent_result = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
     agent = agent_result.scalar_one_or_none()
     model = data.model or (agent.model if agent else "openai/gpt-4o-mini")
 
@@ -131,6 +153,7 @@ async def test_prompt(
             model=model,
             temperature=0.7,
             max_tokens=1000,
+            api_key=current_user.openrouter_key
         )
         return {
             "success": True,
@@ -154,7 +177,8 @@ async def test_prompt(
 async def prompt_assistant_chat(
     req: PromptAssistantRequest,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
     # 1. Carrega o prompt base do especialista
     base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -239,10 +263,14 @@ async def prompt_assistant_chat(
                 messages=messages,
                 temperature=0.5,
                 max_tokens=2048,
+                api_key=current_user.openrouter_key
             ):
                 yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
                 
             yield f'data: {json.dumps({"type": "done"})}\n\n'
+        except OpenRouterError as e:
+            logger.error(f"OpenRouter Error in prompt assistant: {e}")
+            yield f'data: {json.dumps({"type": "error", "message": f"Erro na IA: {str(e)}"})}\n\n'
         except Exception as e:
             logger.error(f"Error in prompt assistant loop: {e}")
             yield f'data: {json.dumps({"type": "error", "message": "Erro ao gerar resposta"})}\n\n'

@@ -1,21 +1,33 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+import bcrypt  # Usaremos bcrypt diretamente para evitar bug do passlib 1.7.4
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
-from app.core.config import settings
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.core.config import settings
+from app.core.database import get_db
+from app.models.user import User
+from app.models.workspace import Workspace
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    # Caso o hash venha do banco como string, convertemos para bytes
+    password_bytes = plain_password.encode('utf-8')
+    hash_bytes = hashed_password.encode('utf-8') if isinstance(hashed_password, str) else hashed_password
+    return bcrypt.checkpw(password_bytes, hash_bytes)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    # Gera o salt e o hash
+    pwd_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(pwd_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -36,9 +48,58 @@ def decode_token(token: str) -> dict:
         )
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> User:
     payload = decode_token(token)
     email = payload.get("sub")
     if not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
-    return {"email": email, "name": payload.get("name", "Admin")}
+    
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+    
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuário inativo")
+        
+    return user
+
+
+async def get_superadmin(current_user: User = Depends(get_current_user)) -> User:
+    """Valida se o usuário é um superadmin."""
+    if not current_user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: Requer privilégios de Super Admin"
+        )
+    return current_user
+
+
+async def get_current_workspace(
+    x_workspace_id: Optional[int] = Header(None, alias="X-Workspace-Id"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> Workspace:
+    """Valida se o usuário tem acesso ao workspace solicitado."""
+    if not x_workspace_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="X-Workspace-Id header is required")
+
+    result = await db.execute(
+        select(Workspace).where(
+            Workspace.id == x_workspace_id,
+            Workspace.members.any(id=current_user.id)
+        )
+    )
+    workspace = result.scalar_one_or_none()
+    
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Acesso negado ao Workspace ou ID inválido"
+        )
+        
+    return workspace

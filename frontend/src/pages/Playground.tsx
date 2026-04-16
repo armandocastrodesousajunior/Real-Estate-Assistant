@@ -120,6 +120,9 @@ export default function Playground() {
               activeToolRef.current = event.tool_name
             } else if (event.type === 'debug_trace') {
               streamingTraceRef.current = event.trace
+            } else if (event.type === 'error') {
+              streamingTextRef.current = `❌ **Erro da IA:** ${event.message || 'Erro desconhecido'}`
+              setStreamingText(streamingTextRef.current)
             }
           } catch {}
         }
@@ -128,8 +131,9 @@ export default function Playground() {
       setStreamingText(''); setStreamingAgent(null); setActiveTool(null); activeToolRef.current = null
       const { data } = await chatAPI.listConversations({ is_test: true })
       setConversations(data)
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro ao conectar com a IA.' }])
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || err.message || 'Erro ao conectar com a IA.'
+      setMessages(prev => [...prev, { role: 'assistant', content: `❌ **Falha na Conexão:** ${errorMsg}\n\nVerifique sua chave de API ou conexão com o servidor.` }])
     } finally { setIsStreaming(false) }
   }
 
@@ -188,7 +192,15 @@ export default function Playground() {
       await loadInitialData()
       setIsCreateModalOpen(false)
       setNewAgentData({ slug: '', name: '', emoji: '🤖', description: '', system_prompt: '' })
-    } catch (err: any) { setCreateError(err.response?.data?.detail || 'Erro ao criar agente.') } finally { setIsCreatingAgent(false) }
+    } catch (err: any) { 
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        const errorMsgs = detail.map((d: any) => `${d.loc[d.loc.length - 1]}: ${d.msg}`).join(', ')
+        setCreateError(`Erro de validação: ${errorMsgs}`)
+      } else {
+        setCreateError(detail || 'Erro ao criar agente.') 
+      }
+    } finally { setIsCreatingAgent(false) }
   }
 
   const handleDeleteAgent = async (e?: React.MouseEvent) => {

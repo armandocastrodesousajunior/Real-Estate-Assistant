@@ -34,7 +34,7 @@ class AgentCreate(BaseModel):
     emoji: str = Field("🤖", max_length=10)
     color: str = Field("#F59E0B", max_length=7)
     model: str = Field("openai/gpt-4o-mini", max_length=100)
-    system_prompt: str = Field(..., min_length=20, description="System prompt do agente — define seu comportamento e escopo.")
+    system_prompt: str = Field(..., min_length=10, description="System prompt do agente — define seu comportamento e escopo.")
 
 
 class AgentUpdate(BaseModel):

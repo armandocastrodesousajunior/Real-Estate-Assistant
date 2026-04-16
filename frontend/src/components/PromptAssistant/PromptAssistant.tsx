@@ -228,6 +228,9 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
             if (event.type === 'token') {
               streamingTextRef.current += event.content;
               setStreamingText(streamingTextRef.current);
+            } else if (event.type === 'error') {
+              streamingTextRef.current = `❌ Error: ${event.message || 'Unknown error occurred'}`;
+              setStreamingText(streamingTextRef.current);
             }
           } catch {}
         }
@@ -247,8 +250,9 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
         setPatchError(failed);
         setLeftView('diff');
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Erro ao conectar-se ao assistente.' }]);
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || err.message || 'Erro de conexão.';
+      setMessages(prev => [...prev, { role: 'assistant', content: `❌ **Falha:** ${errorMsg}` }]);
     } finally {
       setIsStreaming(false);
       setStreamingText('');

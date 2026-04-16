@@ -7,8 +7,10 @@ from sqlalchemy import select, func
 from typing import Optional, List, AsyncGenerator
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_workspace
 from app.core.config import settings
+from app.models.user import User
+from app.models.workspace import Workspace
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.agent import Agent
 from app.schemas.chat import ChatRequest, ChatResponse, ConversationResponse, ConversationDetailResponse, MessageResponse
@@ -17,10 +19,13 @@ from app.agents.orchestrator import route_to_agent, run_agent_stream, get_agent_
 router = APIRouter()
 
 
-async def get_or_create_conversation(db: AsyncSession, session_id: Optional[str], is_test: bool = False) -> Conversation:
+async def get_or_create_conversation(db: AsyncSession, session_id: Optional[str], workspace_id: int, is_test: bool = False) -> Conversation:
     if session_id:
         result = await db.execute(
-            select(Conversation).where(Conversation.session_id == session_id)
+            select(Conversation).where(
+                Conversation.session_id == session_id,
+                Conversation.workspace_id == workspace_id
+            )
         )
         conv = result.scalar_one_or_none()
         if conv:
@@ -28,7 +33,7 @@ async def get_or_create_conversation(db: AsyncSession, session_id: Optional[str]
 
     # Nova conversa
     new_session_id = session_id or str(uuid.uuid4())
-    conv = Conversation(session_id=new_session_id, is_test=is_test)
+    conv = Conversation(session_id=new_session_id, is_test=is_test, workspace_id=workspace_id)
     db.add(conv)
     await db.flush()
     return conv
@@ -50,25 +55,14 @@ async def build_history(db: AsyncSession, conversation_id: int) -> List[dict]:
 @router.post(
     "/",
     summary="Enviar mensagem (streaming)",
-    description="""
-Envia uma mensagem para o sistema multi-agentes e recebe a resposta via **Server-Sent Events (SSE)**.
-
-### Como funciona:
-1. O **Supervisor** analisa a mensagem e roteia ao agente mais adequado
-2. O agente especializado gera a resposta com streaming em tempo real
-3. Eventos SSE são emitidos com `data:` prefix
-
-### Formato dos eventos SSE:
-```
-data: {"type": "agent_selected", "agent_slug": "property_finder", "agent_name": "Buscador de Imóveis", "agent_emoji": "🏠"}
-data: {"type": "token", "content": "Olá "}
-data: {"type": "token", "content": "como posso ajudar?"}
-data: {"type": "done", "session_id": "uuid", "tokens": 42}
-```
-""",
 )
-async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
-    conv = await get_or_create_conversation(db, request.session_id, request.is_test)
+async def chat(
+    request: ChatRequest, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    conv = await get_or_create_conversation(db, request.session_id, workspace.id, request.is_test)
     history = await build_history(db, conv.id)
 
     # Salva mensagem do usuário
@@ -85,11 +79,11 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     if request.agent_slug:
         routing_result = {"slug": request.agent_slug, "debug": {"reason": "Chat Direto Playground"}}
     else:
-        routing_result = await route_to_agent(db, request.message, history)
+        routing_result = await route_to_agent(db, request.message, history, workspace_id=workspace.id, api_key=current_user.openrouter_key)
 
     initial_agent_slug = routing_result["slug"]
     agent_slug = initial_agent_slug
-    agent = await get_agent_config(db, agent_slug)
+    agent = await get_agent_config(db, agent_slug, workspace.id)
 
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agente {agent_slug} não encontrado ou inativo")
@@ -126,7 +120,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             full_response = []
             try:
                 # Inicia o stream no agente atual, passando o tracer e possível contexto de redirecionamento
-                async for chunk in run_agent_stream(db, agent_slug, request.message, history, context=current_redirect_context, trace_log=step_log):
+                async for chunk in run_agent_stream(
+                    db, agent_slug, request.message, history, 
+                    context=current_redirect_context, 
+                    trace_log=step_log,
+                    workspace_id=workspace.id,
+                    api_key=current_user.openrouter_key
+                ):
                     full_response.append(chunk)
                     yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
                 
@@ -165,7 +165,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
                 # Informa no log e recarrega as configs do novo agente
                 print(f"[RE-ROUTE] Da: {old_slug} Para: {agent_slug} | Motivo: {target_slug_reason}")
-                agent = await get_agent_config(db, agent_slug)
+                agent = await get_agent_config(db, agent_slug, workspace.id)
                 agent_name = agent.name if agent else agent_slug
                 agent_emoji = agent.emoji if agent else "🤖"
                 agent_color = agent.color if agent else "#F59E0B"
@@ -245,7 +245,8 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                     user_message=title_prompt,
                     model=settings.SUPERVISOR_MODEL,
                     temperature=0.3,
-                    max_tokens=20
+                    max_tokens=20,
+                    api_key=current_user.openrouter_key
                 )
                 conv.title = bot_title.strip().strip('"').strip("'")
             except Exception:
@@ -281,10 +282,11 @@ async def list_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
     offset = (page - 1) * page_size
-    query = select(Conversation)
+    query = select(Conversation).where(Conversation.workspace_id == workspace.id)
     
     if is_test is not None:
         query = query.where(Conversation.is_test == is_test)
@@ -301,9 +303,16 @@ async def list_conversations(
     summary="Histórico da conversa",
     description="Retorna todos os dados e mensagens de uma conversa específica.",
 )
-async def get_conversation(session_id: str, db: AsyncSession = Depends(get_db)):
+async def get_conversation(
+    session_id: str, 
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     result = await db.execute(
-        select(Conversation).where(Conversation.session_id == session_id)
+        select(Conversation).where(
+            Conversation.session_id == session_id,
+            Conversation.workspace_id == workspace.id
+        )
     )
     conv = result.scalar_one_or_none()
     if not conv:
@@ -339,10 +348,14 @@ async def get_conversation(session_id: str, db: AsyncSession = Depends(get_db)):
 async def delete_conversation(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
     result = await db.execute(
-        select(Conversation).where(Conversation.session_id == session_id)
+        select(Conversation).where(
+            Conversation.session_id == session_id,
+            Conversation.workspace_id == workspace.id
+        )
     )
     conv = result.scalar_one_or_none()
     if not conv:

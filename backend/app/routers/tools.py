@@ -6,7 +6,11 @@ from typing import List, Optional, Dict, Any
 import json, time, uuid
 
 from app.core.database import get_db
+from app.core.security import get_current_user, get_current_workspace
+from app.models.user import User
+from app.models.workspace import Workspace
 from app.models.tool import Tool, agent_tools
+from app.models.agent import Agent
 from app.schemas.tool import ToolResponse, ToolCreate, ToolUpdate, AgentToolLink
 from app.core.tools_registry import get_all_internal_tools
 from app.agents.openrouter import openrouter
@@ -135,21 +139,30 @@ Aguarde o usuário interagir. Apresente-se brevemente e pergunte o que ele quer 
 
 
 @router.get("/", response_model=List[ToolResponse])
-async def list_tools(db: AsyncSession = Depends(get_db)):
+async def list_tools(
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     internal_tools = get_all_internal_tools()
-    result = await db.execute(select(Tool))
+    result = await db.execute(select(Tool).where(Tool.workspace_id == workspace.id))
     external_tools = result.scalars().all()
     return internal_tools + [ToolResponse.model_validate(t) for t in external_tools]
 
 
 @router.post("/", response_model=ToolResponse)
-async def create_tool(tool_in: ToolCreate, db: AsyncSession = Depends(get_db)):
+async def create_tool(
+    tool_in: ToolCreate, 
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     if any(t["slug"] == tool_in.slug for t in get_all_internal_tools()):
         raise HTTPException(status_code=400, detail="Slug reservada por ferramenta interna")
-    result = await db.execute(select(Tool).where(Tool.slug == tool_in.slug))
+    result = await db.execute(
+        select(Tool).where(Tool.slug == tool_in.slug, Tool.workspace_id == workspace.id)
+    )
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Slug ja existe")
-    new_tool = Tool(**tool_in.dict())
+        raise HTTPException(status_code=400, detail="Slug ja existe neste workspace")
+    new_tool = Tool(**tool_in.dict(), workspace_id=workspace.id)
     db.add(new_tool)
     await db.commit()
     await db.refresh(new_tool)
@@ -157,13 +170,35 @@ async def create_tool(tool_in: ToolCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/agent/{agent_slug}", response_model=List[str])
-async def list_agent_tools(agent_slug: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(agent_tools.c.tool_slug).where(agent_tools.c.agent_slug == agent_slug))
+async def list_agent_tools(
+    agent_slug: str, 
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    # Garante que o agente pertence ao workspace
+    stmt = select(agent_tools.c.tool_slug).join(
+        Agent, Agent.slug == agent_tools.c.agent_slug
+    ).where(
+        Agent.slug == agent_slug, 
+        Agent.workspace_id == workspace.id
+    )
+    result = await db.execute(stmt)
     return [row[0] for row in result.all()]
 
 
 @router.post("/link")
-async def link_unlink_tool(link: AgentToolLink, db: AsyncSession = Depends(get_db)):
+async def link_unlink_tool(
+    link: AgentToolLink, 
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    # Valida se o agente pertence ao workspace
+    agent_res = await db.execute(
+        select(Agent).where(Agent.slug == link.agent_slug, Agent.workspace_id == workspace.id)
+    )
+    if not agent_res.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Agente não pertence a este workspace")
+
     if link.action == "link":
         q = select(agent_tools).where(
             agent_tools.c.agent_slug == link.agent_slug,
@@ -185,11 +220,17 @@ async def link_unlink_tool(link: AgentToolLink, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/{slug}")
-async def delete_tool(slug: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Tool).where(Tool.slug == slug))
+async def delete_tool(
+    slug: str, 
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    result = await db.execute(
+        select(Tool).where(Tool.slug == slug, Tool.workspace_id == workspace.id)
+    )
     tool = result.scalar_one_or_none()
     if not tool:
-        raise HTTPException(status_code=404, detail="Ferramenta não encontrada ou interna")
+        raise HTTPException(status_code=404, detail="Ferramenta não encontrada ou acesso negado")
     await db.delete(tool)
     await db.commit()
     return {"status": "ok"}
@@ -217,7 +258,13 @@ class ManualExecuteRequest(PydanticBase):
 
 
 @router.post("/{slug}/execute")
-async def execute_tool(slug: str, req: ManualExecuteRequest, db: AsyncSession = Depends(get_db)):
+async def execute_tool(
+    slug: str, 
+    req: ManualExecuteRequest, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """
     Executa uma ferramenta interna diretamente com parâmetros fornecidos manualmente.
     Mapeia o slug para o endpoint real do sistema e retorna o resultado.
@@ -291,10 +338,14 @@ async def execute_tool(slug: str, req: ManualExecuteRequest, db: AsyncSession = 
         elif mode in ("body", "body_with_id", "body_with_path"):
             body = params
 
-        # Busca um token de admin do sistema para auth
+        # Busca um token de admin do sistema para auth, mas agora com o contexto do usuário real
         from app.core.security import create_access_token
-        internal_token = create_access_token({"sub": "admin@realestateassistant.com"})
-        headers = {"Authorization": f"Bearer {internal_token}", "Content-Type": "application/json"}
+        internal_token = create_access_token({"sub": current_user.email})
+        headers = {
+            "Authorization": f"Bearer {internal_token}", 
+            "Content-Type": "application/json",
+            "X-Workspace-Id": str(workspace.id)
+        }
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             if method == "GET":
@@ -350,7 +401,13 @@ class SandboxChatRequest(BaseModel):
 
 
 @router.post("/{slug}/sandbox")
-async def tool_sandbox(slug: str, req: SandboxChatRequest, db: AsyncSession = Depends(get_db)):
+async def tool_sandbox(
+    slug: str, 
+    req: SandboxChatRequest, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
+):
     """
     Endpoint de Sandbox IA para teste de ferramentas.
     Retorna streaming SSE com tokens, logs e métricas.
@@ -420,6 +477,7 @@ async def tool_sandbox(slug: str, req: SandboxChatRequest, db: AsyncSession = De
                 messages=messages,
                 temperature=0.4,
                 max_tokens=2048,
+                api_key=current_user.openrouter_key
             ):
                 full_response.append(chunk)
                 token_count += 1

@@ -35,7 +35,12 @@ class Conversation(Base):
         back_populates="conversation",
         order_by="Message.created_at",
         lazy="select",
+        cascade="all, delete-orphan",
     )
+
+    # Multi-Tenancy
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace = relationship("Workspace", back_populates="conversations")
 
 
 class Message(Base):

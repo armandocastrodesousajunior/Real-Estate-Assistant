@@ -9,8 +9,10 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_workspace
 from app.core.config import settings
+from app.models.user import User
+from app.models.workspace import Workspace
 from app.models.property import Property, PropertyType, PropertyStatus, PropertyPurpose
 from app.schemas.property import (
     PropertyCreate, PropertyUpdate, PropertyResponse,
@@ -52,8 +54,9 @@ async def list_properties(
     page: int = Query(1, ge=1, description="Página"),
     page_size: int = Query(12, ge=1, le=100, description="Itens por página"),
     db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    query = select(Property)
+    query = select(Property).where(Property.workspace_id == workspace.id)
 
     if q:
         query = query.where(
@@ -119,9 +122,10 @@ async def list_properties(
 async def create_property(
     data: PropertyCreate,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    prop = Property(**data.model_dump())
+    prop = Property(**data.model_dump(), workspace_id=workspace.id)
 
     # Calcula preço por m²
     if prop.area and prop.area > 0:
@@ -143,11 +147,17 @@ async def create_property(
     summary="Detalhe do imóvel",
     description="Retorna os dados completos de um imóvel.",
 )
-async def get_property(property_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Property).where(Property.id == property_id))
+async def get_property(
+    property_id: int, 
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    result = await db.execute(
+        select(Property).where(Property.id == property_id, Property.workspace_id == workspace.id)
+    )
     prop = result.scalar_one_or_none()
     if not prop:
-        raise HTTPException(status_code=404, detail="Imóvel não encontrado")
+        raise HTTPException(status_code=404, detail="Imóvel não encontrado ou acesso negado")
     # Incrementa views
     prop.views += 1
     await db.commit()
@@ -164,12 +174,15 @@ async def update_property(
     property_id: int,
     data: PropertyUpdate,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Property).where(Property.id == property_id))
+    result = await db.execute(
+        select(Property).where(Property.id == property_id, Property.workspace_id == workspace.id)
+    )
     prop = result.scalar_one_or_none()
     if not prop:
-        raise HTTPException(status_code=404, detail="Imóvel não encontrado")
+        raise HTTPException(status_code=404, detail="Imóvel não encontrado ou acesso negado")
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -193,12 +206,15 @@ async def update_property(
 async def delete_property(
     property_id: int,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Property).where(Property.id == property_id))
+    result = await db.execute(
+        select(Property).where(Property.id == property_id, Property.workspace_id == workspace.id)
+    )
     prop = result.scalar_one_or_none()
     if not prop:
-        raise HTTPException(status_code=404, detail="Imóvel não encontrado")
+        raise HTTPException(status_code=404, detail="Imóvel não encontrado ou acesso negado")
 
     # Remove fotos do disco
     for photo_path in (prop.photos or []):
@@ -220,12 +236,15 @@ async def upload_photos(
     property_id: int,
     files: List[UploadFile] = File(..., description="Fotos do imóvel (JPG, PNG, WEBP)"),
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Property).where(Property.id == property_id))
+    result = await db.execute(
+        select(Property).where(Property.id == property_id, Property.workspace_id == workspace.id)
+    )
     prop = result.scalar_one_or_none()
     if not prop:
-        raise HTTPException(status_code=404, detail="Imóvel não encontrado")
+        raise HTTPException(status_code=404, detail="Imóvel não encontrado ou acesso negado")
 
     max_size = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
@@ -270,12 +289,15 @@ async def delete_photo(
     property_id: int,
     photo_index: int,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Property).where(Property.id == property_id))
+    result = await db.execute(
+        select(Property).where(Property.id == property_id, Property.workspace_id == workspace.id)
+    )
     prop = result.scalar_one_or_none()
     if not prop:
-        raise HTTPException(status_code=404, detail="Imóvel não encontrado")
+        raise HTTPException(status_code=404, detail="Imóvel não encontrado ou acesso negado")
 
     photos = list(prop.photos or [])
     if photo_index < 0 or photo_index >= len(photos):

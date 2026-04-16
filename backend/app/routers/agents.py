@@ -4,7 +4,9 @@ from sqlalchemy import select
 from typing import List, Optional
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_current_workspace
+from app.models.user import User
+from app.models.workspace import Workspace
 from app.models.agent import Agent
 from app.models.prompt import Prompt
 from app.schemas.agent import AgentResponse, AgentUpdate, AgentToggle, AgentModelUpdate, AgentCreate
@@ -20,8 +22,12 @@ router = APIRouter()
     summary="Listar agentes",
     description="Retorna todos os agentes com suas configurações e estatísticas.",
 )
-async def list_agents(db: AsyncSession = Depends(get_db), _: dict = Depends(get_current_user)):
-    result = await db.execute(select(Agent).order_by(Agent.id))
+async def list_agents(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    result = await db.execute(select(Agent).where(Agent.workspace_id == workspace.id).order_by(Agent.id))
     return [AgentResponse.model_validate(a) for a in result.scalars().all()]
 
 
@@ -31,11 +37,17 @@ async def list_agents(db: AsyncSession = Depends(get_db), _: dict = Depends(get_
     summary="Detalhes do agente",
     description="Retorna configuração completa e estatísticas de um agente específico.",
 )
-async def get_agent(agent_slug: str, db: AsyncSession = Depends(get_db), _: dict = Depends(get_current_user)):
-    result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+async def get_agent(
+    agent_slug: str, 
+    db: AsyncSession = Depends(get_db), 
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    result = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
     agent = result.scalar_one_or_none()
     if not agent:
-        raise HTTPException(status_code=404, detail="Agente não encontrado")
+        raise HTTPException(status_code=404, detail="Agente não encontrado no workspace")
     return AgentResponse.model_validate(agent)
 
 
@@ -49,9 +61,12 @@ async def update_agent(
     agent_slug: str,
     data: AgentUpdate,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+    result = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
     agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(status_code=404, detail="Agente não encontrado")
@@ -74,9 +89,12 @@ async def toggle_agent(
     agent_slug: str,
     data: AgentToggle,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+    result = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
     agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(status_code=404, detail="Agente não encontrado")
@@ -97,9 +115,12 @@ async def update_agent_model(
     agent_slug: str,
     data: AgentModelUpdate,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+    result = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
     agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(status_code=404, detail="Agente não encontrado")
@@ -120,12 +141,15 @@ async def update_agent_model(
 async def create_agent(
     data: AgentCreate,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    # Verifica se o slug já existe
-    result = await db.execute(select(Agent).where(Agent.slug == data.slug))
+    # Verifica se o slug já existe no workspace
+    result = await db.execute(
+        select(Agent).where(Agent.slug == data.slug, Agent.workspace_id == workspace.id)
+    )
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail=f"O slug '{data.slug}' já está em uso.")
+        raise HTTPException(status_code=400, detail=f"O slug '{data.slug}' já está em uso neste workspace.")
 
     agent = Agent(
         slug=data.slug,
@@ -133,7 +157,8 @@ async def create_agent(
         emoji=data.emoji,
         description=data.description,
         is_system=False,
-        is_active=True
+        is_active=True,
+        workspace_id=workspace.id
     )
     
     db.add(agent)
@@ -145,6 +170,7 @@ async def create_agent(
         version=1,
         is_active=True,
         system_prompt=data.system_prompt,
+        workspace_id=workspace.id,
         notes="Prompt inicial definido na criação do agente."
     )
     db.add(prompt)
@@ -163,9 +189,12 @@ async def create_agent(
 async def delete_agent(
     agent_slug: str,
     db: AsyncSession = Depends(get_db),
-    _: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
 ):
-    result = await db.execute(select(Agent).where(Agent.slug == agent_slug))
+    result = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
     agent = result.scalar_one_or_none()
     
     if not agent:
@@ -181,9 +210,9 @@ async def delete_agent(
     summary="Modelos disponíveis no OpenRouter",
     description="Lista todos os modelos disponíveis via OpenRouter para uso nos agentes.",
 )
-async def get_openrouter_models(_: dict = Depends(get_current_user)):
+async def get_openrouter_models(current_user: User = Depends(get_current_user)):
     try:
-        models = await openrouter.get_available_models()
+        models = await openrouter.get_available_models(api_key=current_user.openrouter_key)
         return {
             "models": [
                 {

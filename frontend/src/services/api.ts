@@ -8,10 +8,14 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Injeta token JWT automaticamente
+// Injeta token JWT e Workspace ID automaticamente
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('rea_token')
+  const workspaceId = localStorage.getItem('rea_workspace_id')
+  
   if (token) config.headers.Authorization = `Bearer ${token}`
+  if (workspaceId) config.headers['X-Workspace-Id'] = workspaceId
+  
   return config
 })
 
@@ -83,11 +87,13 @@ export const promptsAPI = {
     api.post(`/api/v1/prompts/${agentSlug}/test`, data),
   streamAssistantChat: (message: string, history: Array<{role: string, content: string}>, currentPrompt?: string, chatContext?: any) => {
     const token = localStorage.getItem('rea_token')
+    const workspaceId = localStorage.getItem('rea_workspace_id')
     return fetch(`${BASE_URL}/api/v1/prompts/assistant/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
       },
       body: JSON.stringify({ message, history, current_prompt: currentPrompt, chat_context: chatContext }),
     })
@@ -100,11 +106,13 @@ export const chatAPI = {
   /** Cria um EventSource para streaming SSE */
   streamChat: (message: string, sessionId?: string, agentSlug?: string, isTest: boolean = false) => {
     const token = localStorage.getItem('rea_token')
+    const workspaceId = localStorage.getItem('rea_workspace_id')
     return fetch(`${BASE_URL}/api/v1/chat/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
       },
       body: JSON.stringify({ message, session_id: sessionId, agent_slug: agentSlug, is_test: isTest, stream: true }),
     })
@@ -154,15 +162,49 @@ export const toolsAPI = {
   /** Sandbox AI: streaming SSE */
   streamSandbox: (slug: string, message: string, history: Array<{ role: string; content: string }>) => {
     const token = localStorage.getItem('rea_token')
+    const workspaceId = localStorage.getItem('rea_workspace_id')
     return fetch(`/api/v1/tools/${slug}/sandbox`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
       },
       body: JSON.stringify({ message, history }),
     })
   },
 }
 
+// ─── Workspaces ──────────────────────────────────────────────────────────────
 
+export const workspacesAPI = {
+  list: () => api.get('/api/v1/workspaces/'),
+  get: (id: number) => api.get(`/api/v1/workspaces/${id}`),
+  create: (name: string) => api.post('/api/v1/workspaces/', { name }),
+  update: (id: number, name: string) => api.put(`/api/v1/workspaces/${id}`, { name }),
+  delete: (id: number) => api.delete(`/api/v1/workspaces/${id}`),
+  listMembers: (id: number) => api.get(`/api/v1/workspaces/${id}/members`),
+  addMember: (id: number, email: string) => api.post(`/api/v1/workspaces/${id}/members`, { email }),
+  removeMember: (id: number, userId: number) => api.delete(`/api/v1/workspaces/${id}/members/${userId}`),
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+export const usersAPI = {
+  me: () => api.get('/api/v1/users/me'),
+  updateProfile: (data: { full_name?: string; openrouter_key?: string }) =>
+    api.put('/api/v1/users/me', data),
+}
+
+// ─── Super Admin ──────────────────────────────────────────────────────────────
+
+export const superAdminAPI = {
+  getStats: () => api.get('/api/v1/superadmin/stats'),
+  listUsers: () => api.get('/api/v1/superadmin/users'),
+  listWorkspaces: () => api.get('/api/v1/superadmin/workspaces'),
+  toggleUserActive: (userId: number) => 
+    api.patch(`/api/v1/superadmin/users/${userId}/toggle-active`),
+  createUser: (data: any) => api.post('/api/v1/superadmin/users', data),
+  updateUser: (id: number, data: any) => api.put(`/api/v1/superadmin/users/${id}`, data),
+  deleteUser: (id: number) => api.delete(`/api/v1/superadmin/users/${id}`),
+}
