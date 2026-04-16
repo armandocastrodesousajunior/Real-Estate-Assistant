@@ -166,7 +166,7 @@ async def create_agent(
 
     # Cria o prompt com o system_prompt fornecido pelo usuário
     prompt = Prompt(
-        agent_slug=agent.slug,
+        agent_id=agent.id,
         version=1,
         is_active=True,
         system_prompt=data.system_prompt,

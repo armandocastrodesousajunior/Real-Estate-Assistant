@@ -8,8 +8,8 @@ agent_tools = Table(
     "agent_tools",
     Base.metadata,
     Column("id", Integer, primary_key=True),
-    Column("agent_slug", String(50), ForeignKey("agents.slug", ondelete="CASCADE"), index=True),
-    Column("tool_slug", String(50), index=True),
+    Column("agent_id", Integer, ForeignKey("agents.id", ondelete="CASCADE"), index=True),
+    Column("tool_id", Integer, ForeignKey("tools.id", ondelete="CASCADE"), index=True),
 )
 
 class Tool(Base):

@@ -40,8 +40,16 @@ async def get_agent_config(db: AsyncSession, slug: str, workspace_id: int) -> Op
 
 
 async def get_agent_prompt(db: AsyncSession, slug: str, workspace_id: int) -> Optional[str]:
+    # Resolve agent_slug para agent_id
+    agent_res = await db.execute(
+        select(Agent).where(Agent.slug == slug, Agent.workspace_id == workspace_id)
+    )
+    agent = agent_res.scalar_one_or_none()
+    if not agent:
+        return None
+
     result = await db.execute(
-        select(Prompt).where(Prompt.agent_slug == slug, Prompt.is_active == True, Prompt.workspace_id == workspace_id)
+        select(Prompt).where(Prompt.agent_id == agent.id, Prompt.is_active == True, Prompt.workspace_id == workspace_id)
         .order_by(Prompt.version.desc())
     )
     prompt = result.scalar_one_or_none()
@@ -298,7 +306,9 @@ async def run_agent_stream(
         internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
             
     # Injeta Ferramentas vinculadas a este agente
-    tool_links_res = await db.execute(select(agent_tools.c.tool_slug).where(agent_tools.c.agent_slug == agent_slug))
+    tool_links_res = await db.execute(
+        select(Tool.slug).join(agent_tools, Tool.id == agent_tools.c.tool_id).where(agent_tools.c.agent_id == agent.id)
+    )
     tool_slugs = [row[0] for row in tool_links_res.all()]
     
     agent_tools_data = []
@@ -309,7 +319,7 @@ async def run_agent_stream(
             agent_tools_data.append(it)
         else:
             # Tenta no banco (ferramentas externas)
-            et_res = await db.execute(select(Tool).where(Tool.slug == ts, Tool.is_active == True))
+            et_res = await db.execute(select(Tool).where(Tool.slug == ts, Tool.is_active == True, Tool.workspace_id == workspace_id))
             et = et_res.scalar_one_or_none()
             if et:
                 agent_tools_data.append({"slug": et.slug, "description": et.description, "prompt": et.prompt})
@@ -602,7 +612,9 @@ async def run_agent_complete(
         internal_logic = internal_logic.replace("{{AGENTS_DIRECTORY}}", directory)
 
     # Injeta Ferramentas vinculadas no modo sem stream
-    tool_links_res = await db.execute(select(agent_tools.c.tool_slug).where(agent_tools.c.agent_slug == agent_slug))
+    tool_links_res = await db.execute(
+        select(Tool.slug).join(agent_tools, Tool.id == agent_tools.c.tool_id).where(agent_tools.c.agent_id == agent.id)
+    )
     tool_slugs = [row[0] for row in tool_links_res.all()]
     agent_tools_data = []
     for ts in tool_slugs:
@@ -610,7 +622,7 @@ async def run_agent_complete(
         if it:
             agent_tools_data.append(it)
         else:
-            et_res = await db.execute(select(Tool).where(Tool.slug == ts, Tool.is_active == True))
+            et_res = await db.execute(select(Tool).where(Tool.slug == ts, Tool.is_active == True, Tool.workspace_id == workspace_id))
             et = et_res.scalar_one_or_none()
             if et:
                 agent_tools_data.append({"slug": et.slug, "description": et.description, "prompt": et.prompt})

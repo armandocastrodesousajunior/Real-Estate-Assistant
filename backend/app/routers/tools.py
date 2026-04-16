@@ -175,12 +175,32 @@ async def list_agent_tools(
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(get_current_workspace)
 ):
-    # Garante que o agente pertence ao workspace
-    stmt = select(agent_tools.c.tool_slug).join(
-        Agent, Agent.slug == agent_tools.c.agent_slug
+    # Resolve agent_slug para agent_id
+    agent_res = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
+    agent = agent_res.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agente não encontrado")
+
+    # Busca slugs das ferramentas vinculadas (podem ser internas ou externas)
+    # Para ferramentas externas, precisamos buscar o slug na tabela tools pelo ID
+    # Para ferramentas internas, como salvamos o tool_slug no DB (ou decidimos agora usar IDs tbm?)
+    
+    # IMPORTANTE: No modelo anterior, agent_tools tinha tool_slug.
+    # No novo modelo, agent_tools tem tool_id (FK para tools.id).
+    # MAS ferramentas internas não estão na tabela `tools` (são estáticas no código).
+    
+    # SOLUÇÃO: Vamos manter a lógica de que apenas ferramentas EXTERNAS/CUSTOM podem ser vinculadas via DB ID.
+    # OU, melhor ainda: Todas as ferramentas disponíveis devem estar ou poder ser referenciadas.
+    
+    # Decisão: Ferramentas internas continuam sendo identificadas por slug, mas a tabela associativa
+    # para ferramentas customizadas usará IDs.
+    
+    stmt = select(Tool.slug).join(
+        agent_tools, Tool.id == agent_tools.c.tool_id
     ).where(
-        Agent.slug == agent_slug, 
-        Agent.workspace_id == workspace.id
+        agent_tools.c.agent_id == agent.id
     )
     result = await db.execute(stmt)
     return [row[0] for row in result.all()]
@@ -196,23 +216,35 @@ async def link_unlink_tool(
     agent_res = await db.execute(
         select(Agent).where(Agent.slug == link.agent_slug, Agent.workspace_id == workspace.id)
     )
-    if not agent_res.scalar_one_or_none():
+    agent = agent_res.scalar_one_or_none()
+    if not agent:
         raise HTTPException(status_code=403, detail="Agente não pertence a este workspace")
+
+    # Busca a ferramenta pelo slug para pegar o ID
+    tool_res = await db.execute(
+        select(Tool).where(Tool.slug == link.tool_slug, Tool.workspace_id == workspace.id)
+    )
+    tool = tool_res.scalar_one_or_none()
+    
+    # Se não for ferramenta externa, talvez seja interna? 
+    # Atualmente a UI só permite vincular ferramentas que "existem" no DB ou na lista interna.
+    if not tool:
+         raise HTTPException(status_code=404, detail="Ferramenta externa não encontrada para vínculo por ID")
 
     if link.action == "link":
         q = select(agent_tools).where(
-            agent_tools.c.agent_slug == link.agent_slug,
-            agent_tools.c.tool_slug == link.tool_slug
+            agent_tools.c.agent_id == agent.id,
+            agent_tools.c.tool_id == tool.id
         )
         res = await db.execute(q)
         if res.first():
             return {"status": "already linked"}
-        ins = agent_tools.insert().values(agent_slug=link.agent_slug, tool_slug=link.tool_slug)
+        ins = agent_tools.insert().values(agent_id=agent.id, tool_id=tool.id)
         await db.execute(ins)
     else:
         dele = delete(agent_tools).where(
-            agent_tools.c.agent_slug == link.agent_slug,
-            agent_tools.c.tool_slug == link.tool_slug
+            agent_tools.c.agent_id == agent.id,
+            agent_tools.c.tool_id == tool.id
         )
         await db.execute(dele)
     await db.commit()

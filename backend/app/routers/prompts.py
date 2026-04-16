@@ -32,7 +32,7 @@ async def list_prompts(
     workspace: Workspace = Depends(get_current_workspace)
 ):
     result = await db.execute(
-        select(Prompt).where(Prompt.is_active == True, Prompt.workspace_id == workspace.id).order_by(Prompt.agent_slug)
+        select(Prompt).where(Prompt.is_active == True, Prompt.workspace_id == workspace.id).order_by(Prompt.agent_id)
     )
     return [PromptSchema.model_validate(p) for p in result.scalars().all()]
 
@@ -48,9 +48,17 @@ async def get_prompt(
     db: AsyncSession = Depends(get_db), 
     workspace: Workspace = Depends(get_current_workspace)
 ):
+    # Resolve agent_slug para agent_id
+    agent_res = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
+    agent = agent_res.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agente não encontrado")
+
     result = await db.execute(
         select(Prompt)
-        .where(Prompt.agent_slug == agent_slug, Prompt.is_active == True, Prompt.workspace_id == workspace.id)
+        .where(Prompt.agent_id == agent.id, Prompt.is_active == True, Prompt.workspace_id == workspace.id)
         .order_by(Prompt.version.desc())
     )
     prompt = result.scalar_one_or_none()
@@ -76,13 +84,14 @@ async def update_prompt(
     agent_result = await db.execute(
         select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
     )
-    if not agent_result.scalar_one_or_none():
+    agent = agent_result.scalar_one_or_none()
+    if not agent:
         raise HTTPException(status_code=404, detail="Agente não encontrado")
 
-    # Desativa a versão atual no workspace
+    # Desativa a versão atual no workspace para este AGENTE ESPECÍFICO (por ID)
     current_result = await db.execute(
         select(Prompt).where(
-            Prompt.agent_slug == agent_slug, 
+            Prompt.agent_id == agent.id, 
             Prompt.is_active == True,
             Prompt.workspace_id == workspace.id
         )
@@ -95,7 +104,7 @@ async def update_prompt(
 
     # Cria nova versão ativa
     new_prompt = Prompt(
-        agent_slug=agent_slug,
+        agent_id=agent.id,
         version=current_version,
         is_active=True,
         workspace_id=workspace.id,
@@ -120,9 +129,17 @@ async def get_prompt_history(
     db: AsyncSession = Depends(get_db), 
     workspace: Workspace = Depends(get_current_workspace)
 ):
+    # Resolve slug to ID
+    agent_res = await db.execute(
+        select(Agent).where(Agent.slug == agent_slug, Agent.workspace_id == workspace.id)
+    )
+    agent = agent_res.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agente não encontrado")
+
     result = await db.execute(
         select(Prompt)
-        .where(Prompt.agent_slug == agent_slug, Prompt.workspace_id == workspace.id)
+        .where(Prompt.agent_id == agent.id, Prompt.workspace_id == workspace.id)
         .order_by(Prompt.version.desc())
     )
     return [PromptSchema.model_validate(p) for p in result.scalars().all()]

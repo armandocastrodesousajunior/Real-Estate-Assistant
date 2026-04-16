@@ -8,7 +8,7 @@ class Prompt(Base):
     __tablename__ = "prompts"
 
     id = Column(Integer, primary_key=True, index=True)
-    agent_slug = Column(String(50), index=True, nullable=False)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
     version = Column(Integer, default=1)
     is_active = Column(Boolean, default=True)
 
@@ -24,6 +24,7 @@ class Prompt(Base):
     # Multi-Tenancy
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
     workspace = relationship("Workspace", back_populates="prompts")
+    agent = relationship("Agent", back_populates="prompts")
 
 
 # Prompts padrão dos agentes (usados no seed inicial)

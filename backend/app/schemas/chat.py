@@ -64,7 +64,7 @@ class ConversationDetailResponse(ConversationResponse):
 
 class PromptSchema(BaseModel):
     id: int
-    agent_slug: str
+    agent_id: int
     version: int
     is_active: bool
     system_prompt: str

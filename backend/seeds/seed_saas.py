@@ -43,8 +43,7 @@ async def seed_saas():
             full_name=settings.ADMIN_NAME,
             hashed_password=get_password_hash(admin_pass),
             is_superadmin=True,
-            workspace_limit=10,
-            openrouter_key=settings.OPENROUTER_API_KEY # Opcional: injeta a chave do .env no admin
+            workspace_limit=10
         )
         db.add(admin)
         await db.flush()
@@ -59,9 +58,13 @@ async def seed_saas():
         db.add(workspace)
         await db.flush()
         
-        # Vincula admin ao workspace
-        workspace.members.append(admin)
-        logger.info(f"✅ Workspace padrão criado: {workspace.name}")
+        # Vincula admin ao workspace (via tabela associativa)
+        from app.models.workspace import workspace_members
+        await db.execute(
+            workspace_members.insert().values(user_id=admin.id, workspace_id=workspace.id)
+        )
+        logger.info(f"✅ Workspace padrão criado e vinculado ao admin: {workspace.name}")
+        await db.flush()
 
         # 3. Seed Agentes do Sistema no Workspace
         # Aqui podemos usar a lógica do seed_agents.py original mas adaptada para o workspace_id
@@ -89,7 +92,7 @@ async def seed_saas():
             # Adiciona o prompt default
             if a_data["slug"] in DEFAULT_PROMPTS:
                 prompt = Prompt(
-                    agent_slug=a_data["slug"],
+                    agent_id=agent.id,
                     system_prompt=DEFAULT_PROMPTS[a_data["slug"]],
                     workspace_id=workspace.id,
                     is_active=True

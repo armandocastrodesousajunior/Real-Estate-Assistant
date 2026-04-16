@@ -42,3 +42,4 @@ class Agent(Base):
     # Multi-Tenancy
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
     workspace = relationship("Workspace", back_populates="agents")
+    prompts = relationship("Prompt", back_populates="agent", cascade="all, delete-orphan")
