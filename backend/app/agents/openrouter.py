@@ -40,6 +40,7 @@ class OpenRouterClient:
         frequency_penalty: float = 0.0,
         presence_penalty: float = 0.0,
         api_key: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Chamada síncrona (coleta resposta completa)"""
         payload = {
@@ -52,6 +53,9 @@ class OpenRouterClient:
             "presence_penalty": presence_penalty,
             "stream": False,
         }
+        if response_format:
+            payload["response_format"] = response_format
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:
                 response = await client.post(
@@ -86,6 +90,7 @@ class OpenRouterClient:
         frequency_penalty: float = 0.0,
         presence_penalty: float = 0.0,
         api_key: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming de resposta (Server-Sent Events)"""
         payload = {
@@ -98,6 +103,9 @@ class OpenRouterClient:
             "presence_penalty": presence_penalty,
             "stream": True,
         }
+        if response_format:
+            payload["response_format"] = response_format
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
                 async with client.stream(
@@ -158,6 +166,7 @@ class OpenRouterClient:
         temperature: float = 0.3,
         max_tokens: int = 500,
         api_key: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Convenience method para completions simples (retorna só o texto)"""
         result = await self.chat_completion(
@@ -169,6 +178,7 @@ class OpenRouterClient:
             temperature=temperature,
             max_tokens=max_tokens,
             api_key=api_key,
+            response_format=response_format,
         )
         return result["choices"][0]["message"]["content"].strip()
 

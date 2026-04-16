@@ -187,6 +187,54 @@ async def test_prompt(
         }
 
 @router.post(
+    "/assistant/repair",
+    summary="Reparar JSON do Assistente",
+    description="Agente interno para corrigir JSON malformado do Engenheiro de Prompts.",
+)
+async def repair_assistant_json(
+    data: dict, # { "broken_json": "...", "error": "...", "mode": "edit" | "create" }
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    model = (workspace.repair_model if workspace and workspace.repair_model else settings.DEFAULT_REPAIR_MODEL) or "openai/gpt-4o-mini"
+    
+    repair_prompt = f"""Você é um **Agente de Reparação de JSON**.
+Sua única tarefa é receber um texto que deveria ser um JSON mas está malformado, e retornar APENAS o JSON corrigido e válido.
+
+O JSON deve seguir este schema dependendo da intenção:
+{{
+  "action": "chat" | "patch" | "spec",
+  "message": "Mensagem original ou resumo",
+  "edits": [ ... ],
+  "agent_spec": {{ ... }}
+}}
+
+TEXTO QUEBRADO:
+{data.get('broken_json')}
+
+ERRO DE PARSING:
+{data.get('error')}
+
+IMPORTANTE: Retorne APENAS o JSON. Não inclua conversas, explicações ou blocos de código markdown.
+"""
+
+    try:
+        response = await openrouter.simple_complete(
+            system_prompt=repair_prompt,
+            user_message="Corrija o JSON acima.",
+            model=model,
+            temperature=0,
+            api_key=current_user.openrouter_key
+        )
+        # Tira blocos markdown se a IA ignorar o comando
+        clean = response.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean)
+    except Exception as e:
+        logger.error(f"Erro na reparação de JSON: {e}")
+        raise HTTPException(status_code=422, detail="Não foi possível reparar o JSON")
+
+@router.post(
     "/assistant/chat",
     summary="Chat Assistant para Prompts",
     description="Interface SSE para conversar com o Especialista em Prompts.",
@@ -279,16 +327,50 @@ async def prompt_assistant_chat(
         model = workspace.prompt_assistant_model if (workspace and workspace.prompt_assistant_model) else settings.DEFAULT_PROMPT_ASSISTANT_MODEL
         temp = workspace.prompt_assistant_temperature if (workspace and workspace.prompt_assistant_temperature is not None) else settings.DEFAULT_PROMPT_ASSISTANT_TEMPERATURE
 
+        full_response = ""
         try:
+            # Emit debug trace event with the context
+            trace_data = {
+                "supervisor_selection": f"Prompt Assistant ({req.mode})",
+                "supervisor": {
+                    "model": model, 
+                    "temperature": temp,
+                    "reason": f"Atuando em modo {req.mode} para {'edição' if req.mode=='edit' else 'criação'} de prompt."
+                },
+                "calls": [
+                    {
+                        "agent": "AI Engineer",
+                        "messages": [
+                            {**m, "content": (m["content"][:2000] + "... [TRUNCADO]") if len(m.get("content", "")) > 2000 else m.get("content", "")}
+                            for m in messages
+                        ],
+                        "model": model
+                    }
+                ]
+            }
+            yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
+
+            # Define response format if model supports it (OpenAI models and some others)
+            response_format = None
+            if any(m in model for m in ["gpt-4", "gpt-3.5", "claude-3"]):
+                response_format = {"type": "json_object"}
+
             async for chunk in openrouter.chat_completion_stream(
                 model=model,
                 messages=messages,
                 temperature=temp,
                 max_tokens=2048,
-                api_key=current_user.openrouter_key
+                api_key=current_user.openrouter_key,
+                response_format=response_format
             ):
+                full_response += chunk
                 yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
-                
+            
+            # Update trace with final response
+            trace_data["calls"][0]["raw_ai_output"] = full_response
+            yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
+
+            logger.info(f"Prompt Assistant [Mode: {req.mode}] Response: {full_response}")
             yield f'data: {json.dumps({"type": "done"})}\n\n'
         except OpenRouterError as e:
             logger.error(f"OpenRouter Error in prompt assistant: {e}")

@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   X, Send, Bot, FileText, CheckCircle2, GitCompare,
-  ChevronRight, Sparkles, RotateCcw, Info
+  ChevronRight, Sparkles, RotateCcw, Info, Activity
 } from 'lucide-react';
 import { promptsAPI } from '../../services/api';
 import type { AgentSpec } from '../../types/agent';
+import TraceModal from '../TraceModal/TraceModal';
 
 interface PromptAssistantProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ interface PromptAssistantProps {
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  metadata?: any;
 }
 
 interface EditPatch {
@@ -26,17 +28,23 @@ interface EditPatch {
   replace: string;
 }
 
-interface PatchResult {
-  edits: EditPatch[];
-  summary: string;
+interface StandardResponse {
+  action: 'chat' | 'patch' | 'spec' | 'create';
+  message?: string;
+  edits?: EditPatch[];
+  agent_spec?: AgentSpec;
 }
 
 // ─── Diff Engine ──────────────────────────────────────────────────────────────
 type DiffLine = { type: 'added' | 'removed' | 'unchanged'; text: string };
 
 function computeDiff(original: string, modified: string): DiffLine[] {
-  const origLines = original.split('\n');
-  const modLines = modified.split('\n');
+  // Normalize line endings to LF
+  const normOriginal = original.replace(/\r\n/g, '\n');
+  const normModified = modified.replace(/\r\n/g, '\n');
+  
+  const origLines = normOriginal.split('\n');
+  const modLines = normModified.split('\n');
 
   // LCS-based diff (simplified for line-level)
   const m = origLines.length;
@@ -71,6 +79,16 @@ function computeDiff(original: string, modified: string): DiffLine[] {
 }
 
 // ─── Apply patches to a prompt ───────────────────────────────────────────────
+// ─── Simplify Text for Deep Patching ─────────────────────────────────────────
+function deepSimplify(text: string): string {
+  if (!text) return "";
+  // Removes ALL non-alphanumeric characters and normalizes spaces
+  return text
+    .replace(/[^a-z0-9àáâãéèêíïóôõöúçñ]/gi, '')
+    .toLowerCase();
+}
+
+// ─── Apply patches to a prompt ───────────────────────────────────────────────
 function applyPatches(original: string, patches: EditPatch[]): { result: string; applied: number; failed: string[] } {
   let result = original;
   let applied = 0;
@@ -78,13 +96,45 @@ function applyPatches(original: string, patches: EditPatch[]): { result: string;
 
   for (const patch of patches) {
     if (patch.find === '') {
-      // Full replacement (new prompt from scratch)
       result = patch.replace;
       applied++;
       continue;
     }
+
+    // 1. Exact match (High precision)
     if (result.includes(patch.find)) {
       result = result.replace(patch.find, patch.replace);
+      applied++;
+      continue;
+    }
+
+    // 2. Fallback: Normalized line endings
+    const normResult = result.replace(/\r\n/g, '\n');
+    const normFind = patch.find.replace(/\r\n/g, '\n');
+    if (normResult.includes(normFind)) {
+      result = normResult.replace(normFind, patch.replace);
+      applied++;
+      continue;
+    }
+
+    // 3. Deep Match (Bullet-Blind, Markdown-Agnostic, Space-Agnostic)
+    const lines = result.split('\n');
+    const findClean = deepSimplify(patch.find);
+    let lineMatched = -1;
+
+    if (findClean.length > 3) {
+      for (let i = 0; i < lines.length; i++) {
+        const lineClean = deepSimplify(lines[i]);
+        if (lineClean && (lineClean === findClean || lineClean.includes(findClean) || findClean.includes(lineClean))) {
+          lineMatched = i;
+          break;
+        }
+      }
+    }
+
+    if (lineMatched !== -1) {
+      lines[lineMatched] = patch.replace;
+      result = lines.join('\n');
       applied++;
     } else {
       failed.push(patch.find.slice(0, 50) + (patch.find.length > 50 ? '...' : ''));
@@ -93,27 +143,67 @@ function applyPatches(original: string, patches: EditPatch[]): { result: string;
   return { result, applied, failed };
 }
 
-// ─── Extract JSON from AI response ───────────────────────────────────────────
-function extractPatchJSON(raw: string): PatchResult | null {
-  try {
-    const match = raw.match(/```(?:json)?\n?([\s\S]*?)({[\s\S]*?"edits"[\s\S]*?})[\s\S]*?```/);
-    const jsonStr = match ? match[2] : (raw.includes('"edits"') ? raw : null);
-    if (!jsonStr) return null;
-    const parsed = JSON.parse(jsonStr.trim());
-    if (parsed.edits && Array.isArray(parsed.edits)) return parsed as PatchResult;
-  } catch {}
-  return null;
+// ─── JSON Sanitizer ──────────────────────────────────────────────────────────
+function sanitizeJSON(str: string): string {
+  if (!str) return "";
+  
+  let cleaned = str.trim();
+  
+  // 1. Handle unescaped newlines inside quotes
+  // This is a common AI error. We try to escape them.
+  // Note: This is a heuristic and might not be 100% perfect for all cases.
+  cleaned = cleaned.replace(/"([^"]*)"/g, (match, p1) => {
+    return '"' + p1.replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '"';
+  });
+
+  // 2. Remove trailing commas in arrays/objects
+  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+
+  // 3. Remove any control characters that aren't allowed in JSON
+  // eslint-disable-next-line no-control-regex
+  cleaned = cleaned.replace(/[\x00-\x1F\x7F-\x9F]/g, (c) => {
+    if (c === '\n' || c === '\r' || c === '\t') return c; // keep these as literal for now as they'll be escaped next
+    return "";
+  });
+
+  return cleaned;
 }
 
-function extractAgentSpecJSON(raw: string): AgentSpec | null {
+// ─── Unified JSON Parser ───────────────────────────────────────────────────
+function parseAssistantResponse(raw: string): StandardResponse | null {
   try {
-    const match = raw.match(/```(?:json)?\n?([\s\S]*?)({[\s\S]*?"agent_spec"[\s\S]*?})[\s\S]*?```/);
-    const jsonStr = match ? match[2] : (raw.includes('"agent_spec"') ? raw : null);
+    // 1. Try to find JSON block
+    const blockMatch = raw.match(/```(?:json)?\n?([\s\S]*?({[\s\S]*?})[\s\S]*?)```/);
+    let jsonStr = blockMatch ? blockMatch[2] : null;
+    
+    // 2. Try raw object if no block
+    if (!jsonStr) {
+      const rawMatch = raw.match(/({[\s\S]*})/);
+      if (rawMatch) jsonStr = rawMatch[1];
+    }
+    
     if (!jsonStr) return null;
-    const parsed = JSON.parse(jsonStr.trim());
-    if (parsed.agent_spec) return parsed.agent_spec as AgentSpec;
-  } catch {}
-  return null;
+    
+    const cleaned = sanitizeJSON(jsonStr);
+    const parsed = JSON.parse(cleaned);
+    
+    // Map fields to unified response
+    // RealtyAI Standard: type, response.output
+    // Legacy: action, message/summary
+    const rawAction = parsed.type || parsed.action || (parsed.edits ? 'patch' : parsed.agent_spec ? 'create' : 'chat');
+    const finalAction = rawAction === 'response' ? 'chat' : rawAction;
+    const finalMessage = parsed.response?.output || parsed.message || parsed.summary || "";
+
+    return {
+      action: finalAction,
+      message: finalMessage,
+      edits: parsed.edits,
+      agent_spec: parsed.agent_spec
+    } as StandardResponse;
+  } catch (e) {
+    console.warn("Falha ao analisar resposta do assistente:", e);
+    return null;
+  }
 }
 
 // ─── Diff Viewer Component ────────────────────────────────────────────────────
@@ -166,17 +256,20 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState('');
-  const [pendingPatch, setPendingPatch] = useState<PatchResult | null>(null);
+  const [pendingPatch, setPendingPatch] = useState<StandardResponse | null>(null);
   const [pendingAgentSpec, setPendingAgentSpec] = useState<AgentSpec | null>(null);
   // workingPrompt: accumulated version of the prompt after each round of patches
   const [workingPrompt, setWorkingPrompt] = useState<string>(currentPrompt);
   const [patchError, setPatchError] = useState<string[]>([]);
   const [leftView, setLeftView] = useState<'current' | 'diff'>('current');
+  const [isRepairing, setIsRepairing] = useState(false);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingTextRef = useRef('');
   // Use ref so handleSend always reads the latest workingPrompt without stale closure
   const workingPromptRef = useRef(currentPrompt);
+  const [selectedTrace, setSelectedTrace] = useState<any>(null);
+  const streamingTraceRef = useRef<any>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -222,6 +315,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     // Don't reset workingPrompt here — we want to ACCUMULATE patches
     setPatchError([]);
     streamingTextRef.current = '';
+    streamingTraceRef.current = null;
 
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
@@ -244,6 +338,8 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
             if (event.type === 'token') {
               streamingTextRef.current += event.content;
               setStreamingText(streamingTextRef.current);
+            } else if (event.type === 'debug_trace') {
+              streamingTraceRef.current = event.trace;
             } else if (event.type === 'error') {
               streamingTextRef.current = `❌ Error: ${event.message || 'Unknown error occurred'}`;
               setStreamingText(streamingTextRef.current);
@@ -252,26 +348,56 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
         }
       }
 
-      const finalText = streamingTextRef.current;
-      setMessages(prev => [...prev, { role: 'assistant', content: finalText }]);
+      let finalText = streamingTextRef.current;
+      let finalData = parseAssistantResponse(finalText);
 
-      // 1. Check for Patch (Edit mode)
-      const patch = extractPatchJSON(finalText);
-      if (patch && mode === 'edit') {
-        const { result, applied, failed } = applyPatches(workingPromptRef.current, patch.edits);
-        workingPromptRef.current = result;
-        setWorkingPrompt(result);
-        setPendingPatch(patch);
-        setPatchError(failed);
-        setLeftView('diff');
+      // 0. Auto-Repair attempt if parsing failed
+      if (!finalData && (finalText.includes('{') || finalText.includes('edits') || mode === 'create')) {
+        setIsRepairing(true);
+        try {
+          // Call dedicated backend repair agent
+          const repaired = await promptsAPI.repairAssistantJSON(finalText, "Sintaxe JSON inválida ou incompleta", mode);
+          if (repaired) {
+            finalData = {
+              action: repaired.action || (mode === 'edit' ? 'patch' : 'create'),
+              message: repaired.message || repaired.summary || "Resposta reparada automaticamente.",
+              edits: repaired.edits,
+              agent_spec: repaired.agent_spec
+            };
+            // Update textual representation for the UI
+            finalText = JSON.stringify(repaired, null, 2);
+          }
+        } catch (repairErr) {
+          console.error("Auto-repair failed:", repairErr);
+        } finally {
+          setIsRepairing(false);
+        }
       }
 
-      // 2. Check for AgentSpec (Create mode)
-      const spec = extractAgentSpecJSON(finalText);
-      if (spec && mode === 'create') {
-        setPendingAgentSpec(spec);
-        setWorkingPrompt(spec.system_prompt);
-        workingPromptRef.current = spec.system_prompt;
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: finalText, 
+        metadata: streamingTraceRef.current 
+      }]);
+
+      if (finalData) {
+        // 1. Check for Patch (Edit mode)
+        if (finalData.action === 'patch' && finalData.edits) {
+          const { result, applied, failed } = applyPatches(workingPromptRef.current, finalData.edits);
+          workingPromptRef.current = result;
+          setWorkingPrompt(result);
+          setPendingPatch(finalData);
+          setPatchError(failed);
+          setLeftView('diff');
+        }
+
+        // 2. Check for AgentSpec (Create mode)
+        if ((finalData.action === 'create' || finalData.action === 'spec') && finalData.agent_spec) {
+          const spec = finalData.agent_spec;
+          setPendingAgentSpec(spec);
+          setWorkingPrompt(spec.system_prompt);
+          workingPromptRef.current = spec.system_prompt;
+        }
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || err.message || 'Erro de conexão.';
@@ -648,20 +774,18 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                   }}>
                     {m.role === 'assistant' ? (
                       (() => {
-                        const patch = extractPatchJSON(m.content);
-                        const spec = extractAgentSpecJSON(m.content);
+                        const data = parseAssistantResponse(m.content);
 
-                        if (patch && mode === 'edit') {
-                          // Render a clean summary card for patch responses
+                        if (data && data.action === 'patch' && data.edits && mode === 'edit') {
                           return (
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', color: 'var(--accent)', fontWeight: 700, fontSize: '0.8rem' }}>
                                 <CheckCircle2 size={14} />
-                                {patch.edits.length} edição(ões) calculada(s)
+                                {data.edits.length} edição(ões) calculada(s)
                               </div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{patch.summary}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>{data.message || "Edição cirúrgica aplicada."}</div>
                               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {patch.edits.map((e, i) => (
+                                {data.edits.map((e, i) => (
                                   <div key={i} style={{ background: 'var(--bg-card)', borderRadius: '6px', padding: '6px 10px', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
                                     <div style={{ color: '#f87171', marginBottom: '2px' }}>− {e.find.slice(0, 60)}{e.find.length > 60 ? '…' : ''}</div>
                                     {e.replace && <div style={{ color: '#4ade80' }}>+ {e.replace.slice(0, 60)}{e.replace.length > 60 ? '…' : ''}</div>}
@@ -671,11 +795,30 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                               <div style={{ marginTop: '10px', fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                                 ← Veja o diff aplicado no painel esquerdo
                               </div>
+                              {m.metadata && (
+                                <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(m.metadata)}>
+                                  <Activity size={12} />
+                                </button>
+                              )}
+                              {idx === messages.length - 1 && patchError.length > 0 && (
+                                <div style={{ 
+                                  marginTop: '12px', padding: '10px', background: 'rgba(248,113,113,0.1)', 
+                                  border: '1px solid #f87171', borderRadius: '8px', fontSize: '0.75rem' 
+                                }}>
+                                  <div style={{ color: '#f87171', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                    <Info size={14} /> Trecho(s) não localizados automaticamente:
+                                  </div>
+                                  <ul style={{ paddingLeft: '15px', margin: 0, color: 'var(--text-secondary)' }}>
+                                    {patchError.map((err, i) => <li key={i}>{err}</li>)}
+                                  </ul>
+                                </div>
+                              )}
                             </div>
                           );
                         }
                         
-                        if (spec && mode === 'create') {
+                        if (data && (data.action === 'create' || data.action === 'spec') && data.agent_spec && mode === 'create') {
+                          const spec = data.agent_spec;
                           return (
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', color: 'var(--accent)', fontWeight: 700, fontSize: '0.8rem' }}>
@@ -686,12 +829,44 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                               <div style={{ marginTop: '10px', fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                                 ← Confira o preview completo no painel esquerdo
                               </div>
+                              {m.metadata && (
+                                <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(m.metadata)}>
+                                  <Activity size={12} />
+                                </button>
+                              )}
                             </div>
                           );
                         }
 
+                        // Fallback: If no component was rendered, show content while preserving code blocks
+                        const contentToShow = data ? (data.message || JSON.stringify(data, null, 2)) : m.content;
                         return (
-                          <div dangerouslySetInnerHTML={{ __html: m.content.replace(/\n/g, '<br/>').replace(/```[\s\S]*?```/g, '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                          <div style={{ position: 'relative' }}>
+                            <div dangerouslySetInnerHTML={{ 
+                               __html: contentToShow
+                                 .replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg-card); padding:8px; border-radius:4px; overflow:auto; font-size:0.75rem; margin:8px 0; border:1px solid var(--border);"><code>$1</code></pre>')
+                                 .replace(/\n/g, '<br/>')
+                                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+                            }} />
+                            {m.metadata && (
+                              <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(m.metadata)}>
+                                <Activity size={12} />
+                              </button>
+                            )}
+                            {idx === messages.length - 1 && patchError.length > 0 && (
+                               <div style={{ 
+                                 marginTop: '12px', padding: '10px', background: 'rgba(248,113,113,0.1)', 
+                                 border: '1px solid #f87171', borderRadius: '8px', fontSize: '0.75rem' 
+                               }}>
+                                 <div style={{ color: '#f87171', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                   <Info size={14} /> Trecho(s) não localizados automaticamente:
+                                 </div>
+                                 <ul style={{ paddingLeft: '15px', margin: 0, color: 'var(--text-secondary)' }}>
+                                   {patchError.map((err, i) => <li key={i}>{err}</li>)}
+                                 </ul>
+                               </div>
+                            )}
+                          </div>
                         );
                       })()
                     ) : (
@@ -721,7 +896,12 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                     padding: '10px 14px', borderRadius: '10px', fontSize: '0.83rem', lineHeight: '1.55',
                     background: 'var(--bg-elevated)', border: '1px solid var(--accent)', color: 'var(--text-primary)'
                   }}>
-                    {streamingText ? (
+                    {isRepairing ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)', fontSize: '0.78rem' }}>
+                        <RotateCcw size={13} className="animate-spin" />
+                        Reparando resposta com IA secundária...
+                      </div>
+                    ) : streamingText ? (
                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
                         {streamingText.slice(0, 300)}{streamingText.length > 300 ? '…' : ''}
                       </span>
@@ -800,6 +980,12 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
           </div>
         </div>
       )}
+
+      <TraceModal 
+        isOpen={selectedTrace !== null} 
+        onClose={() => setSelectedTrace(null)} 
+        trace={selectedTrace} 
+      />
     </div>
   );
 }
