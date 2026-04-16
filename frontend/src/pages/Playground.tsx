@@ -698,7 +698,22 @@ export default function Playground() {
               </div>
               <div className="form-group">
                 <label className="form-label">Descrição</label>
-                <input className="form-input" placeholder="O que este agente faz?" value={newAgentData.description} onChange={e => setNewAgentData({ ...newAgentData, description: e.target.value })} />
+                <textarea 
+                  className="form-textarea" 
+                  style={{ minHeight: '180px', fontSize: '0.8rem', lineHeight: '1.5' }}
+                  placeholder={`Porta de entrada da imobiliária. Identifica rapidamente a intenção do cliente, dá um "olá" humanizado e encaminha para o especialista correto.
+
+✅ **O que FAZ:**
+- Acolhimento e triagem inicial (Aluguel, Compra, Suporte).
+- Identifica a dor do cliente para transferência ágil.
+
+❌ **O que NÃO FAZ:**
+- Pesquisa de imóveis ou recomendações.
+- Coleta de documentos ou dados sensíveis.
+- Detalhes burocráticos ou contratuais.`}
+                  value={newAgentData.description} 
+                  onChange={e => setNewAgentData({ ...newAgentData, description: e.target.value })} 
+                />
               </div>
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
