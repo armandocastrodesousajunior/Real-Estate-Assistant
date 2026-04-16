@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Plus, Send, Trash2, Activity, Home, MessageSquare, Bot,
-  Save, RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Search as SearchIcon, History as HistoryIcon
+  Save, RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Search as SearchIcon, History as HistoryIcon, Info
 } from 'lucide-react'
 import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
@@ -667,7 +667,7 @@ export default function Playground() {
       {/* New Agent Modal */}
       {isCreateModalOpen && (
         <div className="modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
-          <div className="modal-content" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ width: 42, height: 42, borderRadius: 'var(--radius-md)', background: 'var(--primary-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
@@ -684,23 +684,44 @@ export default function Playground() {
             <form onSubmit={handleCreateAgent} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div className="form-grid">
                 <div className="form-group">
-                  <label className="form-label">Emoji</label>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    Emoji
+                    <div className="has-tooltip" data-explanation="O ícone que representará o agente nas conversas e no menu lateral.">
+                      <Info size={13} style={{ color: 'var(--text-muted)', cursor: 'help' }} />
+                    </div>
+                  </label>
                   <input className="form-input" value={newAgentData.emoji} onChange={e => setNewAgentData({ ...newAgentData, emoji: e.target.value })} style={{ fontSize: '1.5rem', textAlign: 'center' }} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Slug (único) *</label>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    Slug (único) *
+                    <div className="has-tooltip" data-explanation="Identificador único interno (ex: analista_fiscal). Use apenas letras, números e sublinhados.">
+                      <Info size={13} style={{ color: 'var(--text-muted)', cursor: 'help' }} />
+                    </div>
+                  </label>
                   <input className="form-input" placeholder="ex: analista_fiscal" value={newAgentData.slug} onChange={e => setNewAgentData({ ...newAgentData, slug: e.target.value.toLowerCase().replace(/\s+/g, '_') })} required />
                 </div>
               </div>
               <div className="form-group">
-                <label className="form-label">Nome do Agente *</label>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  Nome do Agente *
+                  <div className="has-tooltip" data-explanation="O nome de exibição do especialista (ex: Analista Fiscal Imobiliário).">
+                    <Info size={13} style={{ color: 'var(--text-muted)', cursor: 'help' }} />
+                  </div>
+                </label>
                 <input className="form-input" placeholder="Ex: Analista Fiscal Imobiliário" value={newAgentData.name} onChange={e => setNewAgentData({ ...newAgentData, name: e.target.value })} required />
               </div>
               <div className="form-group">
-                <label className="form-label">Descrição</label>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  Descrição *
+                  <div className="has-tooltip" data-explanation="⚠️ CAMPO CRÍTICO: Descreva detalhadamente as competências do agente. O Supervisor utiliza esta descrição para decidir se este é o agente mais adequado para responder ao usuário.">
+                    <Info size={13} style={{ color: 'var(--accent)', cursor: 'help' }} />
+                  </div>
+                </label>
                 <textarea 
                   className="form-textarea" 
-                  style={{ minHeight: '180px', fontSize: '0.8rem', lineHeight: '1.5' }}
+                  style={{ minHeight: '80px', fontSize: '0.8rem', lineHeight: '1.5' }}
+                  required
                   placeholder={`Porta de entrada da imobiliária. Identifica rapidamente a intenção do cliente, dá um "olá" humanizado e encaminha para o especialista correto.
 
 ✅ **O que FAZ:**
@@ -717,7 +738,12 @@ export default function Playground() {
               </div>
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>System Prompt Inicial</label>
+                  <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    System Prompt Inicial
+                    <div className="has-tooltip" data-explanation="As instruções fundamentais que definem a personalidade, tom de voz e regras de comportamento da IA.">
+                      <Info size={13} style={{ color: 'var(--text-muted)', cursor: 'help' }} />
+                    </div>
+                  </label>
                   <button 
                     type="button"
                     className="btn btn-sm btn-ghost" 
@@ -727,7 +753,37 @@ export default function Playground() {
                     <Bot size={13} style={{ marginRight: '4px' }}/> Gerar com IA
                   </button>
                 </div>
-                <textarea className="form-textarea" style={{ minHeight: '100px', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }} placeholder="Você é um especialista em..." value={newAgentData.system_prompt} onChange={e => setNewAgentData({ ...newAgentData, system_prompt: e.target.value })} />
+                <textarea 
+                  className="form-textarea" 
+                  style={{ minHeight: '140px', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', lineHeight: '1.6' }} 
+                  placeholder={`# Atendimento e Triagem
+
+**[Papel]**
+Porta de entrada da imobiliária. Mapeia a intenção do cliente e identifica a dor para transferir ao especialista correto.
+
+✅ **FAZ:**
+- Acolhimento cordial e triagem (Aluguel, Compra, Suporte).
+- Identifica a intenção principal para o handoff.
+
+❌ **NÃO FAZ:**
+- Pesquisa de imóveis ou recomendações.
+- Coleta de dados sensíveis ou burocracia contratual.
+
+**[Persona]**
+- Eficiente (estilo WhatsApp) e Acolhedora.
+- Profissional, sem pressão ou menus robóticos.
+
+**[Objetivo]**
+Triagem inteligente com no máximo uma pergunta objetiva por vez.
+
+**[Diretrizes]**
+1. Analise se a entrada traz contexto ou é saudação.
+2. Decida rapidamente o destino do cliente no fluxo.
+
+⚠️ **REGRAS:** Zero invenção de dados e limite de 1 pergunta por mensagem.`} 
+                  value={newAgentData.system_prompt} 
+                  onChange={e => setNewAgentData({ ...newAgentData, system_prompt: e.target.value })} 
+                />
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setIsCreateModalOpen(false); setCreateError(null) }}>Cancelar</button>

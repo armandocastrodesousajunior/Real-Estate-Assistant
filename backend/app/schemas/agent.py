@@ -30,7 +30,7 @@ class AgentResponse(BaseModel):
 class AgentCreate(BaseModel):
     slug: str = Field(..., min_length=3, max_length=50, pattern="^[a-z0-9_-]+$")
     name: str = Field(..., min_length=3, max_length=100)
-    description: Optional[str] = None
+    description: str = Field(..., min_length=10, description="Descrição detalhada do papel do agente — CRÍTICO para o roteamento inteligente.")
     emoji: str = Field("🤖", max_length=10)
     color: str = Field("#F59E0B", max_length=7)
     model: str = Field("openai/gpt-4o-mini", max_length=100)
