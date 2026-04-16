@@ -124,117 +124,174 @@ export default function WorkspaceSettings() {
               <p className="text-sm">Apenas o proprietário pode alterar os motores de IA.</p>
             </div>
           ) : (
-            <form onSubmit={handleUpdateAI} className="space-y-10">
+            <form onSubmit={handleUpdateAI} className="space-y-12">
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '32px' }}>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
                 
                 {/* Supervisor */}
-                <div className="p-5 rounded-xl border border-border bg-elevated/30 hover:border-primary/30 transition-colors">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-primary-dim text-primary flex items-center justify-center">
-                      <Zap size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm">Supervisor de Conversa</h4>
-                      <p className="text-[11px] text-muted">Classifica intenções e gera títulos automaticamente.</p>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="form-group">
-                      <label className="form-label text-[10px]">Modelo de IA</label>
-                      <select 
-                        className="form-select"
-                        value={aiConfig.supervisor_model}
-                        onChange={e => setAiConfig({...aiConfig, supervisor_model: e.target.value})}
-                      >
-                        {OPENROUTER_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="form-label text-[10px]">Temperatura</label>
-                        <span className="value-badge">{aiConfig.supervisor_temperature}</span>
+                <div className="card premium-card-gradient" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+                  <div style={{ padding: '24px' }}>
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-primary-dim text-primary flex items-center justify-center" style={{ boxWeight: 'bold', boxShadow: '0 0 20px rgba(99, 102, 241, 0.1)' }}>
+                          <Zap size={24} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-base">Supervisor</h4>
+                            <div 
+                              className="has-tooltip text-muted hover:text-primary transition-colors"
+                              data-explanation="O cérebro principal que decide qual agente deve responder ao usuário e gera títulos automáticos para as conversas."
+                            >
+                              <Info size={14} />
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-muted">Orquestração e Roteamento</p>
+                        </div>
                       </div>
-                      <input 
-                        type="range" min="0" max="1" step="0.1"
-                        value={aiConfig.supervisor_temperature}
-                        onChange={e => setAiConfig({...aiConfig, supervisor_temperature: parseFloat(e.target.value)})}
-                      />
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="form-group">
+                        <label className="form-label text-[10px] uppercase tracking-wider">Modelo de Inteligência</label>
+                        <select 
+                          className="form-select"
+                          style={{ height: '42px', fontSize: '0.85rem' }}
+                          value={aiConfig.supervisor_model}
+                          onChange={e => setAiConfig({...aiConfig, supervisor_model: e.target.value})}
+                        >
+                          {OPENROUTER_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      
+                      <div className="form-group">
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="form-label text-[10px] uppercase tracking-wider">Criatividade (Temp)</label>
+                          <span className="value-badge" style={{ padding: '2px 10px', fontSize: '0.7rem' }}>{aiConfig.supervisor_temperature}</span>
+                        </div>
+                        <input 
+                          type="range" min="0" max="1" step="0.1"
+                          style={{ accentColor: 'var(--primary)' }}
+                          value={aiConfig.supervisor_temperature}
+                          onChange={e => setAiConfig({...aiConfig, supervisor_temperature: parseFloat(e.target.value)})}
+                        />
+                        <div className="flex justify-between text-[10px] text-muted mt-1 px-1">
+                          <span>Preciso</span>
+                          <span>Criativo</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Prompt Assistant */}
-                <div className="p-5 rounded-xl border border-border bg-elevated/30 hover:border-success/30 transition-colors">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-success-dim text-success flex items-center justify-center">
-                      <MessageSquare size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm">Engenheiro de Prompts</h4>
-                      <p className="text-[11px] text-muted">Auxilia na criação e refinamento de instruções dos agentes.</p>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="form-group">
-                      <label className="form-label text-[10px]">Modelo de IA</label>
-                      <select 
-                        className="form-select"
-                        value={aiConfig.prompt_assistant_model}
-                        onChange={e => setAiConfig({...aiConfig, prompt_assistant_model: e.target.value})}
-                      >
-                        {OPENROUTER_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="form-label text-[10px]">Temperatura</label>
-                        <span className="value-badge">{aiConfig.prompt_assistant_temperature}</span>
+                <div className="card premium-card-gradient" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+                  <div style={{ padding: '24px' }}>
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-success-dim text-success flex items-center justify-center" style={{ boxWeight: 'bold', boxShadow: '0 0 20px rgba(16, 185, 129, 0.1)' }}>
+                          <MessageSquare size={24} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-base">Eng. de Prompts</h4>
+                            <div 
+                              className="has-tooltip text-muted hover:text-success transition-colors"
+                              data-explanation="O especialista que te ajuda a escrever instruções perfeitas para seus agentes, garantindo resultados precisos."
+                            >
+                              <Info size={14} />
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-muted">Assistente de Configuração</p>
+                        </div>
                       </div>
-                      <input 
-                        type="range" min="0" max="1" step="0.1"
-                        className="accent-success"
-                        style={{ accentColor: 'var(--success)' }}
-                        value={aiConfig.prompt_assistant_temperature}
-                        onChange={e => setAiConfig({...aiConfig, prompt_assistant_temperature: parseFloat(e.target.value)})}
-                      />
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="form-group">
+                        <label className="form-label text-[10px] uppercase tracking-wider">Modelo de Inteligência</label>
+                        <select 
+                          className="form-select"
+                          style={{ height: '42px', fontSize: '0.85rem' }}
+                          value={aiConfig.prompt_assistant_model}
+                          onChange={e => setAiConfig({...aiConfig, prompt_assistant_model: e.target.value})}
+                        >
+                          {OPENROUTER_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      
+                      <div className="form-group">
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="form-label text-[10px] uppercase tracking-wider">Criatividade (Temp)</label>
+                          <span className="value-badge" style={{ backgroundColor: 'var(--success-dim)', color: 'var(--success)', padding: '2px 10px', fontSize: '0.7rem' }}>{aiConfig.prompt_assistant_temperature}</span>
+                        </div>
+                        <input 
+                          type="range" min="0" max="1" step="0.1"
+                          style={{ accentColor: 'var(--success)' }}
+                          value={aiConfig.prompt_assistant_temperature}
+                          onChange={e => setAiConfig({...aiConfig, prompt_assistant_temperature: parseFloat(e.target.value)})}
+                        />
+                        <div className="flex justify-between text-[10px] text-muted mt-1 px-1">
+                          <span>Preciso</span>
+                          <span>Criativo</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Repair Agent */}
-                <div className="p-5 rounded-xl border border-border bg-elevated/30 hover:border-warning/30 transition-colors">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-lg bg-warning-dim text-warning flex items-center justify-center">
-                      <Cpu size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm">Agente de Reparo (JSON)</h4>
-                      <p className="text-[11px] text-muted">Corrige erros de formatação em tempo real para estabilidade.</p>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="form-group">
-                      <label className="form-label text-[10px]">Modelo de IA</label>
-                      <select 
-                        className="form-select"
-                        value={aiConfig.repair_model}
-                        onChange={e => setAiConfig({...aiConfig, repair_model: e.target.value})}
-                      >
-                        {OPENROUTER_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="form-label text-[10px]">Temperatura</label>
-                        <span className="value-badge">{aiConfig.repair_temperature}</span>
+                <div className="card premium-card-gradient" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+                  <div style={{ padding: '24px' }}>
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-warning-dim text-warning flex items-center justify-center" style={{ boxWeight: 'bold', boxShadow: '0 0 20px rgba(245, 158, 11, 0.1)' }}>
+                          <Cpu size={24} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-base">Reparo JSON</h4>
+                            <div 
+                              className="has-tooltip text-muted hover:text-warning transition-colors"
+                              data-explanation="Garante a estabilidade do sistema corrigindo problemas técnicos e formatação de dados em tempo real."
+                            >
+                              <Info size={14} />
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-muted">Estabilidade e Formatação</p>
+                        </div>
                       </div>
-                      <input 
-                        type="range" min="0" max="1" step="0.1"
-                        style={{ accentColor: 'var(--warning)' }}
-                        value={aiConfig.repair_temperature}
-                        onChange={e => setAiConfig({...aiConfig, repair_temperature: parseFloat(e.target.value)})}
-                      />
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="form-group">
+                        <label className="form-label text-[10px] uppercase tracking-wider">Modelo de Inteligência</label>
+                        <select 
+                          className="form-select"
+                          style={{ height: '42px', fontSize: '0.85rem' }}
+                          value={aiConfig.repair_model}
+                          onChange={e => setAiConfig({...aiConfig, repair_model: e.target.value})}
+                        >
+                          {OPENROUTER_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      
+                      <div className="form-group">
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="form-label text-[10px] uppercase tracking-wider">Criatividade (Temp)</label>
+                          <span className="value-badge" style={{ backgroundColor: 'var(--warning-dim)', color: 'var(--warning)', padding: '2px 10px', fontSize: '0.7rem' }}>{aiConfig.repair_temperature}</span>
+                        </div>
+                        <input 
+                          type="range" min="0" max="1" step="0.1"
+                          style={{ accentColor: 'var(--warning)' }}
+                          value={aiConfig.repair_temperature}
+                          onChange={e => setAiConfig({...aiConfig, repair_temperature: parseFloat(e.target.value)})}
+                        />
+                        <div className="flex justify-between text-[10px] text-muted mt-1 px-1">
+                          <span>Preciso</span>
+                          <span>Criativo</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
