@@ -192,8 +192,10 @@ function parseAssistantResponse(raw: string): StandardResponse | null {
     // RealtyAI Standard: type, response.output
     // Legacy: action, message/summary
     const rawAction = parsed.type || parsed.action || (parsed.edits ? 'patch' : parsed.agent_spec ? 'create' : 'chat');
-    const finalAction = rawAction === 'response' ? 'chat' : rawAction;
-    const finalMessage = parsed.response?.output || parsed.message || parsed.summary || "";
+    
+    // RealtyAI Standard: type "response" is a chat message
+    const finalAction = (rawAction === 'response' || !rawAction) ? 'chat' : rawAction;
+    const finalMessage = parsed.response?.output || parsed.message || parsed.summary || (typeof parsed === 'string' ? parsed : "");
 
     return {
       action: finalAction,
@@ -270,6 +272,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   // Use ref so handleSend always reads the latest workingPrompt without stale closure
   const workingPromptRef = useRef(currentPrompt);
   const [selectedTrace, setSelectedTrace] = useState<any>(null);
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
   const streamingTraceRef = useRef<any>(null);
 
   useEffect(() => {
@@ -337,8 +340,11 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === 'token') {
+              setAiStatus(null);
               streamingTextRef.current += event.content;
               setStreamingText(streamingTextRef.current);
+            } else if (event.type === 'status') {
+              setAiStatus(event.content);
             } else if (event.type === 'debug_trace') {
               streamingTraceRef.current = event.trace;
             } else if (event.type === 'error') {
@@ -406,6 +412,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     } finally {
       setIsStreaming(false);
       setStreamingText('');
+      setAiStatus(null);
       streamingTextRef.current = '';
     }
   };
@@ -917,6 +924,24 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* AI Status Indicator */}
+            {aiStatus && (
+              <div style={{ 
+                padding: '8px 14px', 
+                background: 'rgba(59, 130, 246, 0.05)', 
+                borderTop: '1px solid rgba(59, 130, 246, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: 'var(--accent)',
+                fontSize: '0.72rem',
+                fontStyle: 'italic'
+              }}>
+                <RotateCcw size={12} className="animate-spin" />
+                {aiStatus}
+              </div>
+            )}
 
             {/* Input bar */}
             <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--bg-elevated)', flexShrink: 0 }}>

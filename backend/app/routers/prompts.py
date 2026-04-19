@@ -490,6 +490,8 @@ async def prompt_assistant_chat(
                     continue
                     
                 full_response += chunk
+                # Envia token em tempo real para o frontend
+                yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
 
             # Fim do stream desta rodada
             trace_data["calls"].append(current_trace_call)
@@ -531,17 +533,15 @@ async def prompt_assistant_chat(
                         yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
                         continue # Volta para o while
                 
-                # Se não for tool_call, é o resultado final
-                current_trace_call["success"] = True
-                current_trace_call["raw_ai_output"] = full_response
-                yield f'data: {full_response}\n\n'
+                # Garante que o frontend tenha a versão completa para o parse final
+                yield f'data: {json.dumps({"type": "token", "content": ""})}\n\n'
                 yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
                 break # Sai do loop
 
             except Exception as e:
                 # Se falhar o parse, provavelmente é uma resposta comum ou erro
                 logger.warning(f"Falha no parse do loop do assistente: {e}")
-                yield f'data: {full_response}\n\n'
+                yield f'data: {json.dumps({"type": "token", "content": ""})}\n\n'
                 yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
                 break
 
