@@ -13,7 +13,7 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.agent import Agent
 from app.models.prompt import Prompt
-from app.models.tool import Tool
+from app.models.tool import Tool, agent_tools
 from app.core.tools_registry import get_all_internal_tools
 from app.schemas.chat import PromptSchema, PromptUpdate, PromptTest, PromptAssistantRequest
 from app.agents.openrouter import openrouter, OpenRouterError
@@ -40,11 +40,18 @@ async def inspect_assistant_resource(db: AsyncSession, workspace_id: int, resour
             )
         )
         prompt = p_res.scalar_one_or_none()
+        # Busca ferramentas vinculadas a este agente no banco
+        tool_links_res = await db.execute(
+            select(Tool.slug).join(agent_tools, Tool.id == agent_tools.c.tool_id).where(agent_tools.c.agent_id == agent.id)
+        )
+        linked_tool_slugs = [row[0] for row in tool_links_res.all()]
+
         return {
             "name": agent.name,
             "slug": agent.slug,
             "description": agent.description,
-            "system_prompt": prompt.system_prompt if prompt else "Sem prompt configurado."
+            "system_prompt": prompt.system_prompt if prompt else "Sem prompt configurado.",
+            "linked_tools": linked_tool_slugs
         }
     
     elif resource_type == "tool":
@@ -384,7 +391,7 @@ async def prompt_assistant_chat(
     if tools_content:
         messages.append({
             "role": "user",
-            "content": f"[CATÁLOGO DE FERRAMENTAS DO SISTEMA]\nAqui estão as automações (internas e externas) que podem ser integradas aos agentes. \n\n{tools_content}\n\nORIENTAÇÃO: Antes de sugerir o uso detalhado de uma ferramenta, use 'inspect_system_resource' para validar suas instruções.\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA]"
+            "content": f"[CATÁLOGO DE FERRAMENTAS DO SISTEMA]\nAqui estão as automações (internas e externas) que podem ser integradas aos agentes. \n\n{tools_content}\n\n⚠️ **ATENÇÃO (REGRA DE SEGURANÇA):** O catálogo acima lista o que é POSSÍVEL no sistema. Ele NÃO indica que o agente atual tem permissão/vínculo para usar essas ferramentas. Antes de sugerir ou configurar o uso de ferramentas, você DEVE obrigatoriamente usar 'inspect_system_resource' para verificar o campo `linked_tools` do agente em questão. Se o vínculo não existir, avise o usuário.\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA]"
         })
         messages.append({
             "role": "assistant",
