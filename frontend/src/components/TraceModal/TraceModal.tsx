@@ -12,6 +12,7 @@ interface TraceCall {
   messages_sent?: any[]
   messages?: any[]
   raw_ai_output?: string
+  feedback_examples?: string
   usage?: {
     prompt_tokens: number
     completion_tokens: number
@@ -306,6 +307,35 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
           <div style={{ padding: '0 16px 16px 16px', borderTop: '1px dashed var(--border)', marginTop: '8px', paddingTop: '16px' }}>
             <CodeBlock title={call.agent ? "AI Response Output" : "Raw AI Output (Resposta Bruta do Modelo)"} icon={Terminal} content={call.raw_ai_output || 'N/A'} />
             
+            {/* Feedback Examples injected into context */}
+            {call.feedback_examples && (
+              <div style={{
+                marginTop: '16px',
+                background: 'rgba(245, 158, 11, 0.06)',
+                borderRadius: '8px',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 12px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  borderBottom: '1px solid rgba(245, 158, 11, 0.2)',
+                  fontSize: '0.72rem', fontWeight: 700,
+                  color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
+                  <Activity size={14} /> Feedback de Treinamento Injetado no Contexto
+                </div>
+                <div style={{
+                  padding: '12px', maxHeight: '400px', overflowY: 'auto',
+                  fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
+                  color: '#fde68a', whiteSpace: 'pre-wrap', lineHeight: 1.5,
+                }}>
+                  {call.feedback_examples}
+                </div>
+              </div>
+            )}
+
             {/* If there are assistant context blocks, render them prominently */}
             {(call.messages || call.messages_sent)?.map((m: any, i: number) => (
                 <AssistantContextCard key={i} content={m.content} />

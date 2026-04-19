@@ -8,6 +8,7 @@ import time
 from app.agents.openrouter import openrouter, OpenRouterError
 from app.models.agent import Agent
 from app.models.prompt import Prompt
+from app.models.feedback import MessageFeedback
 from loguru import logger
 import os
 from app.core.config import settings
@@ -95,6 +96,68 @@ def get_internal_prompt(filename: str) -> str:
     except Exception as e:
         logger.error(f"Error loading internal prompt {filename}: {e}")
         return ""
+
+
+async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspace_id: int, limit: int = 15) -> str:
+    """Busca feedbacks positivos e negativos e os formata como exemplos de comportamento."""
+
+    # Feedbacks positivos (respostas aprovadas — continue assim)
+    pos_result = await db.execute(
+        select(MessageFeedback).where(
+            MessageFeedback.workspace_id == workspace_id,
+            MessageFeedback.agent_slug == agent_slug,
+            MessageFeedback.rating == "positive",
+        ).order_by(MessageFeedback.created_at.desc()).limit(limit)
+    )
+    positive = pos_result.scalars().all()
+
+    # Feedbacks negativos com correção (respostas que precisam de ajuste)
+    neg_result = await db.execute(
+        select(MessageFeedback).where(
+            MessageFeedback.workspace_id == workspace_id,
+            MessageFeedback.agent_slug == agent_slug,
+            MessageFeedback.rating == "negative",
+            MessageFeedback.correction != None,
+            MessageFeedback.correction != "",
+        ).order_by(MessageFeedback.created_at.desc()).limit(limit)
+    )
+    negative = neg_result.scalars().all()
+
+    if not positive and not negative:
+        return ""
+
+    lines = [
+        "---",
+        "## 🎯 Referências de Comportamento (Feedback Humano)",
+        "",
+        "Os exemplos abaixo foram avaliados por um humano. Use-os para calibrar suas respostas nesta conversa.",
+        "",
+    ]
+
+    # Seção positiva
+    if positive:
+        lines.append("### ✅ Respostas que foram aprovadas — mantenha este padrão")
+        lines.append("")
+        for i, fb in enumerate(positive, 1):
+            lines.append(f"**Exemplo {i}**")
+            if fb.user_message:
+                lines.append(f"- Pergunta: {fb.user_message}")
+            lines.append(f"- Resposta aprovada: {fb.ai_response}")
+            lines.append("")
+
+    # Seção negativa
+    if negative:
+        lines.append("### ❌ Situações onde você errou — corrija este padrão")
+        lines.append("")
+        for i, fb in enumerate(negative, 1):
+            lines.append(f"**Exemplo {i}**")
+            if fb.user_message:
+                lines.append(f"- Pergunta: {fb.user_message}")
+            lines.append(f"- Sua resposta (INCORRETA): {fb.ai_response}")
+            lines.append(f"- Como deveria ter respondido: {fb.correction}")
+            lines.append("")
+
+    return "\n".join(lines)
 
 
 async def route_to_agent(
@@ -418,6 +481,11 @@ async def run_agent_stream(
     # Montagem Final: Personalidade (DB) + Lógica (Código)
     full_system = f"{system_prompt}\n\n{internal_logic}"
 
+    # Injeta feedbacks negativos como exemplos de comportamento correto (in-context learning)
+    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id)
+    if feedback_context:
+        full_system += f"\n\n{feedback_context}"
+
     if context:
         full_system += f"\n\n## Contexto Adicional:\n{context}"
 
@@ -430,6 +498,8 @@ async def run_agent_stream(
         trace_log["system_prompt"] = full_system
         trace_log["messages_sent"] = messages
         trace_log["raw_ai_output"] = ""
+        if feedback_context:
+            trace_log["feedback_examples"] = feedback_context
     
     print(f"   ↳ [AI START] Gerando resposta com modelo: {agent.model}...")
     start = time.time()
@@ -644,6 +714,11 @@ async def run_agent_complete(
 
     # Montagem Final: Personalidade (DB) + Lógica (Código)
     full_system = f"{system_prompt}\n\n{internal_logic}"
+
+    # Injeta feedbacks negativos como exemplos de comportamento correto (in-context learning)
+    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id)
+    if feedback_context:
+        full_system += f"\n\n{feedback_context}"
 
     if context:
         full_system += f"\n\n## Contexto Adicional:\n{context}"
