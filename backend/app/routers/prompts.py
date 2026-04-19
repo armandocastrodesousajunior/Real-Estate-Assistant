@@ -335,9 +335,10 @@ async def prompt_assistant_chat(
         
         for agent in workspace_agents:
             is_current = (req.mode == "edit" and agent.slug == req.agent_slug)
-            tag_atual = ' [ESTE É O AGENTE QUE VOCÊ ESTÁ EDITANDO AGORA]' if is_current else ''
-            ecosystem_content += f"\n- {agent.name} (slug: {agent.slug}){tag_atual}\n"
-            ecosystem_content += f"  Papel: {agent.description}\n"
+            tag_atual = ' [AGENTE ATUAL SENDO EDITADO]' if is_current else ''
+            ecosystem_content += f"\n- NOME: {agent.name}{tag_atual}\n"
+            ecosystem_content += f"  SLUG: {agent.slug}\n"
+            ecosystem_content += f"  DESCRIÇÃO: {agent.description or 'Sem descrição disponível.'}\n"
             
         ecosystem_content = f"\n[ECOSSISTEMA DE AGENTES DO WORKSPACE - VISÃO REDUZIDA]\n{ecosystem_content}\n[/ECOSSISTEMA DE AGENTES DO WORKSPACE - VISÃO REDUZIDA]\n"
     except Exception as e:
@@ -348,14 +349,18 @@ async def prompt_assistant_chat(
     try:
         internal_tools = get_all_internal_tools()
         for t in internal_tools:
-            tools_content += f"- {t['name']} (slug: {t['slug']}) [INTERNA]: {t['description'][:100]}...\n"
+            tools_content += f"\n- NOME: {t['name']} [FERRAMENTA INTERNA]\n"
+            tools_content += f"  SLUG: {t['slug']}\n"
+            tools_content += f"  DESCRIÇÃO: {t['description']}\n"
             
         ext_tools_res = await db.execute(
             select(Tool).where(Tool.workspace_id == workspace.id, Tool.is_active == True)
         )
         external_tools = ext_tools_res.scalars().all()
         for t in external_tools:
-            tools_content += f"- {t.name} (slug: {t.slug}) [EXTERNA]: {t.description[:100]}...\n"
+            tools_content += f"\n- NOME: {t.name} [FERRAMENTA EXTERNA]\n"
+            tools_content += f"  SLUG: {t.slug}\n"
+            tools_content += f"  DESCRIÇÃO: {t.description}\n"
             
         tools_content = f"\n[CATÁLOGO DE FERRAMENTAS DO SISTEMA - VISÃO REDUZIDA]\n{tools_content}\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA - VISÃO REDUZIDA]\n"
     except Exception as e:
