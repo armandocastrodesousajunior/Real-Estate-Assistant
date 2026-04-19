@@ -104,6 +104,7 @@ const AssistantContextCard = ({ content }: { content: string }) => {
   // Regex to identify blocks
   const blocks = [
     { id: 'ECOSYSTEM', label: 'Ecossistema Multi-Agente', icon: List, regex: /\[ECOSSISTEMA DE AGENTES DO WORKSPACE\]([\s\S]*?)\[\/ECOSSISTEMA DE AGENTES DO WORKSPACE\]/ },
+    { id: 'TOOLS', label: 'Catálogo de Ferramentas do Sistema', icon: Wrench, regex: /\[CATÁLOGO DE FERRAMENTAS DO SISTEMA\]([\s\S]*?)\[\/CATÁLOGO DE FERRAMENTAS DO SISTEMA\]/ },
     { id: 'PROMPT', label: 'Prompt Atual (Em Edição)', icon: FileText, regex: /\[PROMPT ATUAL\]([\s\S]*?)\[\/PROMPT ATUAL\]/ },
     { id: 'ANALYSIS', label: 'Análise de Histórico / Logs', icon: Terminal, regex: /\[CONTEXTO DA CONVERSA - ANÁLISE\]([\s\S]*?)\[\/CONTEXTO DA CONVERSA - ANÁLISE\]/ }
   ];

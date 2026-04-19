@@ -13,6 +13,8 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.models.agent import Agent
 from app.models.prompt import Prompt
+from app.models.tool import Tool
+from app.core.tools_registry import get_all_internal_tools
 from app.schemas.chat import PromptSchema, PromptUpdate, PromptTest, PromptAssistantRequest
 from app.agents.openrouter import openrouter, OpenRouterError
 from loguru import logger
@@ -298,13 +300,44 @@ async def prompt_assistant_chat(
             tag_atual = ' [ESTE É O AGENTE QUE VOCÊ ESTÁ EDITANDO AGORA]' if is_current else ''
             ecosystem_content += f"\n-- AGENTE: {agent.name} (slug: {agent.slug}){tag_atual} --\n"
             ecosystem_content += f"Descrição: {agent.description}\n"
+            
             if active_p:
                 # Se for o agente sendo editado, usamos o prompt que veio do frontend (mais atual) ou o do banco
                 p_text = req.current_prompt if (is_current and req.current_prompt) else active_p.system_prompt
                 ecosystem_content += f"Prompt do Sistema:\n{p_text}\n"
+            
             ecosystem_content += f"{'-'*30}\n"
+            
+        ecosystem_content = f"\n[ECOSSISTEMA DE AGENTES DO WORKSPACE]\n{ecosystem_content}\n[/ECOSSISTEMA DE AGENTES DO WORKSPACE]\n"
     except Exception as e:
-        logger.error(f"Erro ao carregar ecossistema de agentes: {e}")
+        logger.error(f"Erro ao carregar ecossistema: {e}")
+    
+    # 4. Carrega o catálogo de ferramentas (Internas e Externas)
+    tools_content = ""
+    try:
+        # Ferramentas Internas
+        internal_tools = get_all_internal_tools()
+        for t in internal_tools:
+            tools_content += f"\n-- TOOL: {t['name']} (slug: {t['slug']}) [INTERNA] --\n"
+            tools_content += f"Descrição: {t['description']}\n"
+            tools_content += f"Prompt de Uso: {t['prompt']}\n"
+            
+        # Ferramentas Externas do Workspace
+        ext_tools_res = await db.execute(
+            select(Tool).where(Tool.workspace_id == workspace.id, Tool.is_active == True)
+        )
+        external_tools = ext_tools_res.scalars().all()
+        for t in external_tools:
+            tools_content += f"\n-- TOOL: {t.name} (slug: {t.slug}) [EXTERNA] --\n"
+            tools_content += f"Descrição: {t.description}\n"
+            tools_content += f"Prompt de Uso: {t.prompt}\n"
+            
+        tools_content = f"\n[CATÁLOGO DE FERRAMENTAS DO SISTEMA]\n{tools_content}\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA]\n"
+    except Exception as e:
+        logger.error(f"Erro ao carregar catálogo de ferramentas: {e}")
+
+    # 5. Injeta os blocos técnicos no system prompt do assistente
+    system_prompt += f"\n\n{ecosystem_content}\n{tools_content}"
 
     # 4. Monta o histórico
     messages = [{"role": "system", "content": system_prompt}]
