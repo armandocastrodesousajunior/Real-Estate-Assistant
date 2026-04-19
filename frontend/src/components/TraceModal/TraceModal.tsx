@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { X, ArrowRight, User, Bot, Search, Code, List, ChevronDown, ChevronRight, MessageSquare, Terminal, FileText, Copy, Check, Wrench, Activity } from 'lucide-react'
 
 interface TraceCall {
-  agent_slug: string
-  success: boolean
+  agent_slug?: string
+  agent?: string
+  model?: string
+  success?: boolean
   redirected_to?: string
   redirect_reason?: string
   system_prompt?: string
   messages_sent?: any[]
+  messages?: any[]
   raw_ai_output?: string
   tool_call?: {
     name: string
@@ -27,18 +30,77 @@ interface TraceModalProps {
   }
 }
 
-const CodeBlock = ({ title, icon: Icon, content }: { title: string; icon: any; content: string }) => {
+const CodeBlock = ({ title, icon: Icon, content, variant = 'default' }: { title: string; icon: any; content: string; variant?: 'default' | 'context' }) => {
   if (!content) return null;
+  const isContext = variant === 'context';
+  
   return (
-    <div style={{ marginTop: '16px', background: 'rgba(0,0,0,0.4)', borderRadius: '6px', border: '1px solid var(--border)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--border)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+    <div style={{ 
+      marginTop: '16px', 
+      background: isContext ? 'rgba(59, 130, 246, 0.05)' : 'rgba(0,0,0,0.4)', 
+      borderRadius: '8px', 
+      border: isContext ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid var(--border)', 
+      overflow: 'hidden' 
+    }}>
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '8px', 
+        padding: '8px 12px', 
+        background: isContext ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.05)', 
+        borderBottom: isContext ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid var(--border)', 
+        fontSize: '0.72rem', 
+        fontWeight: 700, 
+        color: isContext ? 'var(--primary)' : 'var(--text-muted)', 
+        textTransform: 'uppercase', 
+        letterSpacing: '0.05em' 
+      }}>
         <Icon size={14} /> {title}
       </div>
-      <div style={{ padding: '12px', maxHeight: '300px', overflowY: 'auto', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: '#e0e0e0', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+      <div style={{ 
+        padding: '12px', 
+        maxHeight: '400px', 
+        overflowY: 'auto', 
+        fontSize: '0.75rem', 
+        fontFamily: 'var(--font-mono)', 
+        color: isContext ? '#bfdbfe' : '#e0e0e0', 
+        whiteSpace: 'pre-wrap', 
+        lineHeight: 1.5 
+      }}>
         {content}
       </div>
     </div>
   )
+}
+
+const AssistantContextCard = ({ content }: { content: string }) => {
+  // Regex to identify blocks
+  const blocks = [
+    { id: 'ECOSYSTEM', label: 'Ecossistema Multi-Agente', icon: List, regex: /\[ECOSSISTEMA DE AGENTES DO WORKSPACE\]([\s\S]*?)\[\/ECOSSISTEMA DE AGENTES DO WORKSPACE\]/ },
+    { id: 'PROMPT', label: 'Prompt Atual (Em Edição)', icon: FileText, regex: /\[PROMPT ATUAL\]([\s\S]*?)\[\/PROMPT ATUAL\]/ },
+    { id: 'ANALYSIS', label: 'Análise de Histórico / Logs', icon: Terminal, regex: /\[CONTEXTO DA CONVERSA - ANÁLISE\]([\s\S]*?)\[\/CONTEXTO DA CONVERSA - ANÁLISE\]/ }
+  ];
+
+  const foundBlocks = blocks.map(b => {
+    const match = content.match(b.regex);
+    return match ? { ...b, content: match[1].trim() } : null;
+  }).filter(Boolean);
+
+  if (foundBlocks.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+      {foundBlocks.map((block: any) => (
+        <CodeBlock 
+          key={block.id}
+          title={block.label}
+          icon={block.icon}
+          content={block.content}
+          variant="context"
+        />
+      ))}
+    </div>
+  );
 }
 
 const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNumber: number; isLast: boolean }) => {
@@ -46,9 +108,19 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
 
   const formatMessages = (messages: any[]) => {
     if (!messages || !Array.isArray(messages)) return 'Nenhum contexto de mensagens disponível.';
+    
+    // Clean up content by removing structural blocks for the main thread view
+    const cleanContent = (text: string) => {
+      let cleaned = text;
+      cleaned = cleaned.replace(/\[ECOSSISTEMA[\s\S]*?\/ECOSSISTEMA[^\]]*\]/g, '*(Estrutura do Ecossistema injetada)*');
+      cleaned = cleaned.replace(/\[PROMPT ATUAL\][\s\S]*?\[\/PROMPT ATUAL\]/g, '*(Prompt atual para edição injetado)*');
+      cleaned = cleaned.replace(/\[CONTEXTO DA CONVERSA[\s\S]*?\/CONTEXTO DA CONVERSA[^\]]*\]/g, '*(Logs e histórico para análise injetados)*');
+      return cleaned;
+    };
+
     return messages
       .filter(m => m.role !== 'system')
-      .map(m => `[${m.role.toUpperCase()}]\n${m.content}`)
+      .map(m => `[${m.role.toUpperCase()}]\n${cleanContent(m.content)}`)
       .join('\n\n');
   }
 
@@ -74,7 +146,8 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
                 }
               </div>
               <div className="font-semibold text-white flex items-center gap-2">
-                Agente: <span className={call.success ? '' : 'text-gray-400'}>{call.agent_slug}</span>
+                {call.agent ? 'Entidade: ' : 'Agente: '} 
+                <span className={call.success !== false ? '' : 'text-gray-400'}>{call.agent || call.agent_slug}</span>
               </div>
             </div>
             <button className="btn btn-ghost p-1" style={{ color: 'var(--text-muted)' }}>
@@ -127,9 +200,15 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
         {/* Expanded Body (Technical Details) */}
         {expanded && (
           <div style={{ padding: '0 16px 16px 16px', borderTop: '1px dashed var(--border)', marginTop: '8px', paddingTop: '16px' }}>
-            <CodeBlock title="Raw AI Output (Resposta Bruta do Modelo)" icon={Terminal} content={call.raw_ai_output || 'N/A'} />
-            <CodeBlock title="Contexto de Mensagens (Histórico)" icon={MessageSquare} content={formatMessages(call.messages_sent || [])} />
-            <CodeBlock title="System Prompt Entregue ao Modelo" icon={FileText} content={call.system_prompt || 'N/A'} />
+            <CodeBlock title={call.agent ? "AI Response Output" : "Raw AI Output (Resposta Bruta do Modelo)"} icon={Terminal} content={call.raw_ai_output || 'N/A'} />
+            
+            {/* If there are assistant context blocks, render them prominently */}
+            {(call.messages || call.messages_sent)?.map((m: any, i: number) => (
+                <AssistantContextCard key={i} content={m.content} />
+            ))}
+
+            <CodeBlock title="Timeline de Mensagens (Thread)" icon={MessageSquare} content={formatMessages(call.messages || call.messages_sent || [])} />
+            {call.system_prompt && <CodeBlock title="System Prompt Entregue ao Modelo" icon={FileText} content={call.system_prompt} />}
           </div>
         )}
 
@@ -141,6 +220,7 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
 export default function TraceModal({ isOpen, onClose, trace }: TraceModalProps) {
   const [showJson, setShowJson] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const isAssistant = trace?.supervisor_selection?.toLowerCase().includes('prompt assistant');
 
   if (!isOpen || !trace) return null
 
@@ -204,18 +284,18 @@ export default function TraceModal({ isOpen, onClose, trace }: TraceModalProps) 
             {/* Step 1: Supervisor */}
             <div className="timeline-item" style={{ display: 'flex', gap: '16px', zIndex: 1, position: 'relative' }}>
             <div className="timeline-icon" style={{
-                width: '48px', height: '48px', borderRadius: '50%', background: '#FFFFFF',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000000', flexShrink: 0
+                width: '48px', height: '48px', borderRadius: '50%', background: isAssistant ? 'var(--primary)' : '#FFFFFF',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: isAssistant ? '#FFF' : '#000000', flexShrink: 0
               }}>
-                <User size={20} />
+                {isAssistant ? <Activity size={20} /> : <User size={20} />}
               </div>
               <div className="timeline-content" style={{ flex: 1, background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <div className="text-xs text-muted font-mono mb-1">Passo 1 • Classificação Inicial (Zero-Shot)</div>
-                <div className="font-semibold text-white">Supervisor (Roteamento Rápido)</div>
+                <div className="text-xs text-muted font-mono mb-1">Passo 1 • {isAssistant ? 'Engenharia de Prompt' : 'Classificação Inicial (Zero-Shot)'}</div>
+                <div className="font-semibold text-white">{isAssistant ? 'Prompt Assistant Configuration' : 'Supervisor (Roteamento Rápido)'}</div>
                 
                 <div className="mt-2 text-sm">
-                  <span className="text-muted">Ação principal: </span>
-                  <span className="badge badge-primary">{trace.supervisor_selection}</span>
+                  <span className="text-muted">Iniciado como: </span>
+                  <span className="badge badge-primary" style={{ background: isAssistant ? 'var(--primary-dim)' : 'var(--primary)', border: 'none' }}>{trace.supervisor_selection}</span>
                 </div>
                 
                 {trace.supervisor?.reason && (
