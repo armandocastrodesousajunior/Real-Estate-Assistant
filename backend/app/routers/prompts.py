@@ -291,9 +291,10 @@ async def prompt_assistant_chat(
             )
             active_p = p_res.scalar_one_or_none()
             
-            is_current = (agent.slug == req.agent_slug)
+            is_current = (req.mode == "edit" and agent.slug == req.agent_slug)
             
-            ecosystem_content += f"\n-- AGENTE: {agent.name} (slug: {agent.slug}) {'[ESTE É O AGENTE QUE VOCÊ ESTÁ EDITANDO AGORA]' if is_current else ''} --\n"
+            tag_atual = ' [ESTE É O AGENTE QUE VOCÊ ESTÁ EDITANDO AGORA]' if is_current else ''
+            ecosystem_content += f"\n-- AGENTE: {agent.name} (slug: {agent.slug}){tag_atual} --\n"
             ecosystem_content += f"Descrição: {agent.description}\n"
             if active_p:
                 # Se for o agente sendo editado, usamos o prompt que veio do frontend (mais atual) ou o do banco
