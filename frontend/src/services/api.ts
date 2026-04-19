@@ -85,6 +85,7 @@ export const promptsAPI = {
     api.get(`/api/v1/prompts/${agentSlug}/history`),
   test: (agentSlug: string, data: Record<string, unknown>) =>
     api.post(`/api/v1/prompts/${agentSlug}/test`, data),
+  listResources: () => api.get('/api/v1/prompts/assistant/resources'),
   streamAssistantChat: (message: string, history: Array<{role: string, content: string}>, currentPrompt?: string, chatContext?: any, mode: string = 'edit', agentSlug?: string) => {
     const token = localStorage.getItem('rea_token')
     const workspaceId = localStorage.getItem('rea_workspace_id')

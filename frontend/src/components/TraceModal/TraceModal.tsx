@@ -57,16 +57,23 @@ interface TraceModalProps {
   }
 }
 
-const CodeBlock = ({ title, icon: Icon, content, variant = 'default' }: { title: string; icon: any; content: string; variant?: 'default' | 'context' }) => {
+const CodeBlock = ({ title, icon: Icon, content, variant = 'default' }: { title: string; icon: any; content: string; variant?: 'default' | 'context' | 'mention' }) => {
   if (!content) return null;
   const isContext = variant === 'context';
+  const isMention = variant === 'mention';
   
+  const bgColor = isMention ? 'rgba(139, 92, 246, 0.05)' : isContext ? 'rgba(59, 130, 246, 0.05)' : 'rgba(0,0,0,0.4)';
+  const borderColor = isMention ? 'rgba(139, 92, 246, 0.2)' : isContext ? 'rgba(59, 130, 246, 0.2)' : 'var(--border)';
+  const headerBg = isMention ? 'rgba(139, 92, 246, 0.1)' : isContext ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.05)';
+  const accentColor = isMention ? '#a78bfa' : isContext ? 'var(--primary)' : 'var(--text-muted)';
+  const textColor = isMention ? '#e9d5ff' : isContext ? '#bfdbfe' : '#e0e0e0';
+
   return (
     <div style={{ 
       marginTop: '16px', 
-      background: isContext ? 'rgba(59, 130, 246, 0.05)' : 'rgba(0,0,0,0.4)', 
+      background: bgColor, 
       borderRadius: '8px', 
-      border: isContext ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid var(--border)', 
+      border: `1px solid ${borderColor}`, 
       overflow: 'hidden' 
     }}>
       <div style={{ 
@@ -74,11 +81,11 @@ const CodeBlock = ({ title, icon: Icon, content, variant = 'default' }: { title:
         alignItems: 'center', 
         gap: '8px', 
         padding: '8px 12px', 
-        background: isContext ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.05)', 
-        borderBottom: isContext ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid var(--border)', 
+        background: headerBg, 
+        borderBottom: `1px solid ${borderColor}`, 
         fontSize: '0.72rem', 
         fontWeight: 700, 
-        color: isContext ? 'var(--primary)' : 'var(--text-muted)', 
+        color: accentColor, 
         textTransform: 'uppercase', 
         letterSpacing: '0.05em' 
       }}>
@@ -90,7 +97,7 @@ const CodeBlock = ({ title, icon: Icon, content, variant = 'default' }: { title:
         overflowY: 'auto', 
         fontSize: '0.75rem', 
         fontFamily: 'var(--font-mono)', 
-        color: isContext ? '#bfdbfe' : '#e0e0e0', 
+        color: textColor, 
         whiteSpace: 'pre-wrap', 
         lineHeight: 1.5 
       }}>
@@ -102,16 +109,28 @@ const CodeBlock = ({ title, icon: Icon, content, variant = 'default' }: { title:
 
 const AssistantContextCard = ({ content }: { content: string }) => {
   const blocks = [
-    { id: 'ECOSYSTEM', label: 'Ecosystem Architecture (Skeleton)', icon: List, regex: /\[(?:ECOSSISTEMA DE AGENTES DO WORKSPACE|CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA)(?: - VISÃO REDUZIDA)?\]([\s\S]*?)\[\/(?:ECOSSISTEMA DE AGENTES DO WORKSPACE|CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA)(?: - VISÃO REDUZIDA)?\]/ },
-    { id: 'TOOLS', label: 'System Tools Catalog (Skeleton)', icon: Wrench, regex: /\[CATÁLOGO DE FERRAMENTAS DO SISTEMA(?: - VISÃO REDUZIDA)?\]([\s\S]*?)\[\/CATÁLOGO DE FERRAMENTAS DO SISTEMA(?: - VISÃO REDUZIDA)?\]/ },
-    { id: 'PROMPT', label: 'Current System Prompt (Subject)', icon: FileText, regex: /\[PROMPT ATUAL\]([\s\S]*?)\[\/PROMPT ATUAL\]/ },
-    { id: 'ANALYSIS', label: 'Interaction Context Analysis', icon: Terminal, regex: /\[CONTEXTO DA CONVERSA - ANÁLISE\]([\s\S]*?)\[\/CONTEXTO DA CONVERSA - ANÁLISE\]/ }
+    { id: 'MENTIONS', label: 'Contexto de Recursos (@)', icon: Bot, regex: /\[RECURSO MENCIONADO: ([^\]]+)\]([\s\S]*?)\[\/RECURSO MENCIONADO: \1\]/g, variant: 'mention' as const },
+    { id: 'ECOSYSTEM', label: 'Ecosystem Architecture (Skeleton)', icon: List, regex: /\[(?:ECOSSISTEMA DE AGENTES DO WORKSPACE|CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA)(?: - VISÃO REDUZIDA)?\]([\s\S]*?)\[\/(?:ECOSSISTEMA DE AGENTES DO WORKSPACE|CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA)(?: - VISÃO REDUZIDA)?\]/g },
+    { id: 'TOOLS', label: 'System Tools Catalog (Skeleton)', icon: Wrench, regex: /\[CATÁLOGO DE FERRAMENTAS DO SISTEMA(?: - VISÃO REDUZIDA)?\]([\s\S]*?)\[\/CATÁLOGO DE FERRAMENTAS DO SISTEMA(?: - VISÃO REDUZIDA)?\]/g },
+    { id: 'PROMPT', label: 'Current System Prompt (Subject)', icon: FileText, regex: /\[PROMPT ATUAL\]([\s\S]*?)\[\/PROMPT ATUAL\]/g },
+    { id: 'ANALYSIS', label: 'Interaction Context Analysis', icon: Terminal, regex: /\[CONTEXTO DA CONVERSA - ANÁLISE\]([\s\S]*?)\[\/CONTEXTO DA CONVERSA - ANÁLISE\]/g }
   ];
 
-  const foundBlocks = blocks.map(b => {
-    const match = content.match(b.regex);
-    return match ? { ...b, content: match[1].trim() } : null;
-  }).filter(Boolean);
+  const foundBlocks: any[] = [];
+  
+  blocks.forEach(b => {
+    let match;
+    const regex = new RegExp(b.regex);
+    while ((match = regex.exec(content)) !== null) {
+      foundBlocks.push({
+        ...b,
+        id: b.id + (match[1] || ''),
+        label: b.id === 'MENTIONS' ? `Recurso: @${match[1]}` : b.label,
+        content: (b.id === 'MENTIONS' ? match[2] : match[1]).trim()
+      });
+      if (!b.regex.global) break;
+    }
+  });
 
   if (foundBlocks.length === 0) return null;
 
@@ -123,7 +142,7 @@ const AssistantContextCard = ({ content }: { content: string }) => {
           title={block.label}
           icon={block.icon}
           content={block.content}
-          variant="context"
+          variant={block.variant || "context"}
         />
       ))}
     </div>

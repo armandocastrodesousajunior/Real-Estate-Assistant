@@ -125,6 +125,78 @@ async def get_prompt(
     return PromptSchema.model_validate(prompt)
 
 
+@router.get(
+    "/assistant/resources",
+    summary="Listar todos os recursos para menção",
+    description="Retorna slugs, nomes e tipos de todos os agentes e ferramentas."
+)
+async def list_assistant_resources(
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace)
+):
+    # 1. Agentes
+    agents_res = await db.execute(
+        select(Agent.slug, Agent.name).where(Agent.workspace_id == workspace.id)
+    )
+    resources = [{"slug": row[0], "name": row[1], "type": "agent"} for row in agents_res.all()]
+    
+    # 2. Ferramentas Internas
+    internal_tools = get_all_internal_tools()
+    for t in internal_tools:
+        resources.append({"slug": t["slug"], "name": t["name"], "type": "tool"})
+        
+    # 3. Ferramentas Externas
+    ext_tools_res = await db.execute(
+        select(Tool.slug, Tool.name).where(Tool.workspace_id == workspace.id, Tool.is_active == True)
+    )
+    for row in ext_tools_res.all():
+        resources.append({"slug": row[0], "name": row[1], "type": "tool"})
+        
+    return resources
+
+
+async def parse_and_inject_mentions(db: AsyncSession, workspace_id: int, text: str):
+    """
+    Varre o texto em busca de @slug e retorna um bloco de informações para cada um.
+    """
+    import re
+    mention_pattern = r"@([a-zA-Z0-9_\-]+)"
+    slugs = list(set(re.findall(mention_pattern, text)))
+    
+    injected_blocks = []
+    mention_metadata = []
+    
+    for slug in slugs:
+        # Tenta agente primeiro, depois ferramenta
+        resource_data = await inspect_assistant_resource(db, workspace_id, "agent", slug)
+        if isinstance(resource_data, str) and "não encontrado" in resource_data:
+            resource_data = await inspect_assistant_resource(db, workspace_id, "tool", slug)
+            
+        if not isinstance(resource_data, str):
+            res_type = "AGENTE" if "system_prompt" in resource_data else "FERRAMENTA"
+            
+            # Formatação profissional para a IA
+            block = f"\n[RECURSO MENCIONADO: {slug}]\n"
+            block += f"TIPO: {res_type}\n"
+            block += f"NOME: {resource_data.get('name')}\n"
+            block += f"DESCRIÇÃO: {resource_data.get('description')}\n"
+            if res_type == "AGENTE":
+                block += f"SYSTEM PROMPT: {resource_data.get('system_prompt')}\n"
+                block += f"FERRAMENTAS VINCULADAS: {', '.join(resource_data.get('linked_tools', []))}\n"
+            else:
+                 block += f"CONEXÃO/PROMPT: {resource_data.get('prompt', 'Configuração interna')}\n"
+            block += f"[/RECURSO MENCIONADO: {slug}]\n"
+            
+            injected_blocks.append(block)
+            mention_metadata.append({
+                "slug": slug,
+                "name": resource_data.get('name'),
+                "type": res_type.lower()
+            })
+            
+    return "".join(injected_blocks), mention_metadata
+
+
 @router.put(
     "/{agent_slug}",
     response_model=PromptSchema,
@@ -440,9 +512,21 @@ async def prompt_assistant_chat(
     for h in req.history:
         messages.append({"role": h.role, "content": h.content})
         
+    # 6. Analisa menções (@) no texto do usuário para injeção de contexto detalhado
+    mentions_content, mentions_meta = await parse_and_inject_mentions(db, workspace.id, req.message)
+    if mentions_content:
+        messages.append({
+            "role": "user",
+            "content": f"[INJEÇÃO DE CONTEXTO POR MENÇÃO (@)]\nO usuário mencionou recursos específicos na mensagem. Abaixo estão os detalhes técnicos completos (incluindo prompts) para que você possa analisar sem precisar de ferramentas extras:\n\n{mentions_content}\n[/INJEÇÃO DE CONTEXTO POR MENÇÃO (@)]"
+        })
+        messages.append({
+            "role": "assistant",
+            "content": f"Contexto de menções recebido: {', '.join([m['slug'] for m in mentions_meta])}. Já processei os detalhes técnicos e estou pronto para discutir esses recursos."
+        })
+
     messages.append({"role": "user", "content": req.message})
 
-    # 4. Stream
+    # 7. Stream
     async def event_stream():
         # Preferência por configurações do workspace
         model = workspace.prompt_assistant_model if (workspace and workspace.prompt_assistant_model) else settings.DEFAULT_PROMPT_ASSISTANT_MODEL
@@ -463,7 +547,8 @@ async def prompt_assistant_chat(
                 "temperature": temp,
                 "reason": f"Atuando em modo {req.mode} para {'edição' if req.mode=='edit' else 'criação'} de prompt."
             },
-            "calls": []
+            "calls": [],
+            "mentions": mentions_meta
         }
 
         response_format = None

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   X, Send, Bot, FileText, CheckCircle2, GitCompare,
-  ChevronRight, Sparkles, RotateCcw, Info, Activity
+  ChevronRight, Sparkles, RotateCcw, Info, Activity,
+  Zap, Wrench, Search
 } from 'lucide-react';
 import { promptsAPI } from '../../services/api';
 import type { AgentSpec } from '../../types/agent';
@@ -301,6 +302,14 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   const [selectedTrace, setSelectedTrace] = useState<any>(null);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
   const streamingTraceRef = useRef<any>(null);
+  
+  // Mentions State
+  const [resources, setResources] = useState<any[]>([]);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionCoords, setMentionCoords] = useState({ top: 0, left: 0 });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -318,6 +327,11 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
       setShowConfirmClose(false);
       streamingTextRef.current = '';
 
+      // Load resources for mentions
+      promptsAPI.listResources()
+        .then(res => setResources(res.data))
+        .catch(err => console.error("Error loading mention resources:", err));
+
       if (chatContext && chatContext.history) {
         // Trigger auto-analysis without user action
         setTimeout(() => {
@@ -333,6 +347,46 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingText]);
+
+  // ─── Mention Logic ──────────────────────────────────────────────────────────
+
+  const filteredResources = resources.filter(r => 
+    r.slug.toLowerCase().includes(mentionSearch.toLowerCase()) ||
+    r.name.toLowerCase().includes(mentionSearch.toLowerCase())
+  ).slice(0, 8);
+
+  const handleMentionSelect = (resource: any) => {
+    const beforeMention = input.substring(0, input.lastIndexOf('@'));
+    const afterMention = input.substring(input.lastIndexOf('@') + mentionSearch.length + 1);
+    
+    setInput(`${beforeMention}@${resource.slug} ${afterMention}`);
+    setShowMentions(false);
+    setMentionSearch('');
+    textareaRef.current?.focus();
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setInput(val);
+
+    const lastAt = val.lastIndexOf('@', cursor - 1);
+    if (lastAt !== -1) {
+      const textAfterAt = val.substring(lastAt + 1, cursor);
+      // Open mentions if @ is followed by alphanumerics/dashes or nothing
+      if (/^[a-zA-Z0-9_\-]*$/.test(textAfterAt)) {
+        setMentionSearch(textAfterAt);
+        setShowMentions(true);
+        setMentionIndex(0);
+        
+        // Basic coordinate estimation (Top-left of textarea + heuristic offset)
+        // In a real app, you might use a library for absolute caret positioning
+        setMentionCoords({ top: -10, left: 20 }); 
+        return;
+      }
+    }
+    setShowMentions(false);
+  };
 
   const handleSend = async (overrideApiText?: string, overrideVisibleText?: string) => {
     const apiText = (typeof overrideApiText === 'string' ? overrideApiText : input).trim();
@@ -997,12 +1051,89 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
 
             {/* Input bar */}
             <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: 'var(--bg-elevated)', flexShrink: 0 }}>
-              <div className="input-box-container" style={{ background: 'var(--bg-card)', borderRadius: '10px' }}>
+              <div className="input-box-container" style={{ background: 'var(--bg-card)', borderRadius: '10px', position: 'relative' }}>
+                {showMentions && filteredResources.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 12px)',
+                    left: '0',
+                    width: '100%',
+                    maxWidth: '400px',
+                    background: 'rgba(23, 23, 23, 0.95)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                    zIndex: 100,
+                    overflow: 'hidden',
+                    animation: 'slideUp 0.2s ease-out'
+                  }}>
+                    <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mencionar Recurso</span>
+                      <Search size={10} style={{ color: 'var(--text-muted)' }} />
+                    </div>
+                    <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                      {filteredResources.map((res, i) => (
+                        <div
+                          key={res.slug}
+                          onClick={() => handleMentionSelect(res)}
+                          onMouseEnter={() => setMentionIndex(i)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            background: i === mentionIndex ? 'var(--primary-dim)' : 'transparent',
+                            borderLeft: i === mentionIndex ? '3px solid var(--primary)' : '3px solid transparent',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <div style={{ 
+                            width: '32px', height: '32px', borderRadius: '8px', 
+                            background: res.type === 'agent' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: res.type === 'agent' ? 'var(--primary)' : '#f59e0b'
+                          }}>
+                            {res.type === 'agent' ? <Bot size={16} /> : <Zap size={16} />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{res.name}</div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>@{res.slug}</div>
+                          </div>
+                          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{res.type === 'agent' ? 'Agente' : 'Tool'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <textarea
-                  placeholder={isStreaming ? 'Processando...' : isEditMode ? 'Descreva o que alterar ou converse com a IA... (Enter envia)' : 'Descreva o novo especialista... (Enter envia)'}
+                  ref={textareaRef}
+                  placeholder={isStreaming ? 'Processando...' : isEditMode ? 'Descreva o que alterar (@ para mencionar)... (Enter envia)' : 'Descreva o novo especialista (@ para mencionar)... (Enter envia)'}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  onChange={handleTextareaChange}
+                  onKeyDown={e => { 
+                    if (showMentions) {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setMentionIndex(prev => (prev + 1) % filteredResources.length);
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setMentionIndex(prev => (prev - 1 + filteredResources.length) % filteredResources.length);
+                      } else if (e.key === 'Enter' || e.key === 'Tab') {
+                        e.preventDefault();
+                        handleMentionSelect(filteredResources[mentionIndex]);
+                      } else if (e.key === 'Escape') {
+                        setShowMentions(false);
+                      }
+                      return;
+                    }
+                    if (e.key === 'Enter' && !e.shiftKey) { 
+                      e.preventDefault(); 
+                      handleSend(); 
+                    } 
+                  }}
                   disabled={isStreaming}
                   rows={2}
                   style={{ padding: '10px 12px', fontSize: '0.83rem', resize: 'none' }}
