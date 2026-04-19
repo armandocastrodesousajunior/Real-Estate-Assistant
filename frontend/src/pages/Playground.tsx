@@ -803,6 +803,7 @@ Triagem inteligente com no máximo uma pergunta objetiva por vez.
         isOpen={isPromptAssistantOpen}
         onClose={() => { setIsPromptAssistantOpen(false); setActiveChatContext(null); }}
         mode={promptAssistantMode}
+        agentSlug={selectedAgentSlug}
         currentPrompt={promptAssistantMode === 'edit' ? editedPrompt : newAgentData.system_prompt}
         chatContext={activeChatContext}
         onApply={(generatedData) => {

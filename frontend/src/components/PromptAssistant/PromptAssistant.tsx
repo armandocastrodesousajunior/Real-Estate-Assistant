@@ -14,6 +14,7 @@ interface PromptAssistantProps {
   onApply: (generatedData: string | AgentSpec) => void;
   mode: 'edit' | 'create';
   chatContext?: any;
+  agentSlug?: string;
 }
 
 
@@ -251,7 +252,7 @@ function DiffViewer({ original, modified }: { original: string; modified: string
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', onApply, mode, chatContext }: PromptAssistantProps) {
+export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', onApply, mode, chatContext, agentSlug }: PromptAssistantProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -320,7 +321,7 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
       // Always send the accumulated working version so AI patches the right base
-      const response = await promptsAPI.streamAssistantChat(apiText, history, workingPromptRef.current, chatContext, mode);
+      const response = await promptsAPI.streamAssistantChat(apiText, history, workingPromptRef.current, chatContext, mode, agentSlug);
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';

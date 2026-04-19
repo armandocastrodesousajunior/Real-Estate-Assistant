@@ -96,5 +96,6 @@ class PromptAssistantRequest(BaseModel):
     message: str = Field(..., description="Mensagem do usuário")
     history: List[PromptAssistantMessage] = Field(default_factory=list, description="Histórico da conversa no assistente")
     mode: Optional[str] = Field("edit", description="Modo de operação: 'edit' ou 'create'")
+    agent_slug: Optional[str] = Field(None, description="Slug do agente sendo editado")
     current_prompt: Optional[str] = Field(None, description="Prompt atualmente editado no frontend, se houver")
     chat_context: Optional[Dict] = Field(None, description="Contexto do chat (histórico e logs) que gerou o bug selecionado.")

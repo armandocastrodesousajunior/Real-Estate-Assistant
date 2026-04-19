@@ -271,9 +271,51 @@ async def prompt_assistant_chat(
         logger.error(f"Erro ao carregar exemplos de prompt: {e}")
     
     system_prompt = system_prompt.replace("{{EXAMPLES_CONTENT}}", examples_content)
+    
+    # 3. Carrega o ecossistema de agentes do workspace para coerência multi-agente
+    ecosystem_content = ""
+    try:
+        agents_res = await db.execute(
+            select(Agent).where(Agent.workspace_id == workspace.id)
+        )
+        workspace_agents = agents_res.scalars().all()
+        
+        for agent in workspace_agents:
+            # Busca o prompt ativo de cada agente
+            p_res = await db.execute(
+                select(Prompt).where(
+                    Prompt.agent_id == agent.id,
+                    Prompt.is_active == True,
+                    Prompt.workspace_id == workspace.id
+                )
+            )
+            active_p = p_res.scalar_one_or_none()
+            
+            is_current = (agent.slug == req.agent_slug)
+            
+            ecosystem_content += f"\n-- AGENTE: {agent.name} (slug: {agent.slug}) {'[ESTE É O AGENTE QUE VOCÊ ESTÁ EDITANDO AGORA]' if is_current else ''} --\n"
+            ecosystem_content += f"Descrição: {agent.description}\n"
+            if active_p:
+                # Se for o agente sendo editado, usamos o prompt que veio do frontend (mais atual) ou o do banco
+                p_text = req.current_prompt if (is_current and req.current_prompt) else active_p.system_prompt
+                ecosystem_content += f"Prompt do Sistema:\n{p_text}\n"
+            ecosystem_content += f"{'-'*30}\n"
+    except Exception as e:
+        logger.error(f"Erro ao carregar ecossistema de agentes: {e}")
 
-    # 3. Monta o histórico
+    # 4. Monta o histórico
     messages = [{"role": "system", "content": system_prompt}]
+    
+    # Injeta a visão global do ecossistema como contexto inicial
+    if ecosystem_content:
+        messages.append({
+            "role": "user",
+            "content": f"[ECOSSISTEMA DE AGENTES DO WORKSPACE]\nVocê está operando dentro de uma estrutura multi-agente. Abaixo estão os detalhes de todos os agentes configurados neste workspace. Use estas informações para garantir que os prompts sejam coerentes entre si e que não haja sobreposição de funções:\n\n{ecosystem_content}\n\n[/ECOSSISTEMA DE AGENTES DO WORKSPACE]"
+        })
+        messages.append({
+            "role": "assistant",
+            "content": "Entendido. Analisei o ecossistema completo de agentes do workspace. Estou ciente de todas as personas, responsabilidades e prompts configurados. Vou garantir que minhas sugestões e edições mantenham a coerência sistêmica e evitem sobreposições."
+        })
     
     # Injeta o contexto da conversa se o usuário selecionou uma mensagem para debug
     if req.chat_context and "history" in req.chat_context:
@@ -291,9 +333,7 @@ async def prompt_assistant_chat(
             chat_logs += f"De: {role}\nConteúdo: {content}\n"
             if meta:
                 meta_str = json.dumps(meta, ensure_ascii=False, indent=2)
-                # Limita tamanho dos logs p/ n estourar context
-                if len(meta_str) > 3000:
-                    meta_str = meta_str[:3000] + "\n... [TRUNCADO]"
+                # Envia metadados completos conforme solicitado pelo usuário
                 chat_logs += f"Rastreamento da IA (Logs/Metadata): {meta_str}\n"
         
         messages.append({
@@ -340,10 +380,7 @@ async def prompt_assistant_chat(
                 "calls": [
                     {
                         "agent": "AI Engineer",
-                        "messages": [
-                            {**m, "content": (m["content"][:2000] + "... [TRUNCADO]") if len(m.get("content", "")) > 2000 else m.get("content", "")}
-                            for m in messages
-                        ],
+                        "messages": messages,
                         "model": model
                     }
                 ]
