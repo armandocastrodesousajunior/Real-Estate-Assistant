@@ -12,11 +12,37 @@ interface TraceCall {
   messages_sent?: any[]
   messages?: any[]
   raw_ai_output?: string
+  usage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    total_cost?: number
+  }
   tool_call?: {
     name: string
     arguments: any
   }
   tool_result?: any
+}
+
+interface TraceUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  total_cost?: number
+  cost?: number
+  prompt_tokens_details?: {
+    cached_tokens?: number
+    [key: string]: any
+  }
+  completion_tokens_details?: {
+    reasoning_tokens?: number
+    [key: string]: any
+  }
+  cost_details?: {
+    upstream_inference_cost?: number
+    [key: string]: any
+  }
 }
 
 interface TraceModalProps {
@@ -27,6 +53,7 @@ interface TraceModalProps {
     supervisor_selection?: string
     calls?: TraceCall[]
     final_agent?: string
+    total_usage?: TraceUsage
   }
 }
 
@@ -103,6 +130,62 @@ const AssistantContextCard = ({ content }: { content: string }) => {
   );
 }
 
+const UsageStats = ({ usage, label = "Uso de Tokens" }: { usage?: TraceUsage | any, label?: string }) => {
+  if (!usage) return null;
+  
+  const cost = usage.total_cost || usage.cost || 0;
+  const hasCost = cost > 0;
+  
+  const cached = usage.prompt_tokens_details?.cached_tokens || 0;
+  const reasoning = usage.completion_tokens_details?.reasoning_tokens || 0;
+
+  return (
+    <div style={{ 
+      display: 'flex', 
+      flexWrap: 'wrap',
+      gap: '8px', 
+      marginTop: '12px',
+      padding: '8px 12px',
+      background: 'rgba(255,255,255,0.03)',
+      borderRadius: '6px',
+      border: '1px solid rgba(255,255,255,0.05)'
+    }}>
+      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, width: '100%', marginBottom: '2px', textTransform: 'uppercase' }}>
+        {label}
+      </div>
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-800/50 border border-gray-700/50 text-[10px] text-gray-300">
+        <ArrowRight size={10} className="text-blue-400" /> {usage.prompt_tokens || 0} In
+      </div>
+      
+      {cached > 0 && (
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-900/30 border border-blue-500/30 text-[10px] text-blue-300 font-bold">
+          <Check size={10} /> {cached} Cached
+        </div>
+      )}
+
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-800/50 border border-gray-700/50 text-[10px] text-gray-300">
+        <ArrowRight size={10} className="text-green-400 rotate-180" /> {usage.completion_tokens || 0} Out
+      </div>
+
+      {reasoning > 0 && (
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-900/30 border border-purple-500/30 text-[10px] text-purple-300 font-bold">
+          <Activity size={10} /> {reasoning} Reasoning
+        </div>
+      )}
+
+      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-900/20 border border-blue-800/30 text-[10px] text-blue-200">
+        Total: {usage.total_tokens || 0}
+      </div>
+      
+      {hasCost && (
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-900/20 border border-emerald-800/30 text-[10px] text-emerald-300 font-bold ml-auto">
+          Custo: ${cost.toFixed(6)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNumber: number; isLast: boolean }) => {
   const [expanded, setExpanded] = useState(false)
 
@@ -149,6 +232,8 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
                 {call.agent ? 'Entidade: ' : 'Agente: '} 
                 <span className={call.success !== false ? '' : 'text-gray-400'}>{call.agent || call.agent_slug}</span>
               </div>
+              
+              <UsageStats usage={call.usage} label="Uso deste Step" />
             </div>
             <button className="btn btn-ghost p-1" style={{ color: 'var(--text-muted)' }}>
               {expanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
@@ -248,6 +333,11 @@ export default function TraceModal({ isOpen, onClose, trace }: TraceModalProps) 
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: '#FFFFFF', margin: 0 }}>
             <Search size={22} /> Rastreamento Detalhado de IA
+            {(trace.total_usage?.total_cost || trace.total_usage?.cost) && (
+              <span className="text-xs font-normal px-2 py-1 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-800/50 ml-2">
+                Custo Total: ${(trace.total_usage.total_cost || trace.total_usage.cost || 0).toFixed(6)}
+              </span>
+            )}
           </h2>
           <button 
             onClick={() => setShowJson(!showJson)}
@@ -297,6 +387,9 @@ export default function TraceModal({ isOpen, onClose, trace }: TraceModalProps) 
                   <span className="text-muted">Iniciado como: </span>
                   <span className="badge badge-primary" style={{ background: isAssistant ? 'var(--primary-dim)' : 'var(--primary)', border: 'none' }}>{trace.supervisor_selection}</span>
                 </div>
+                
+                {/* Supervisor Usage */}
+                <UsageStats usage={trace.supervisor?.usage} label="Uso do Supervisor/Redirecionador" />
                 
                 {trace.supervisor?.reason && (
                   <div className="mt-3 p-3 rounded" style={{ background: 'rgba(255,255,255,0.05)', borderLeft: '3px solid var(--text-muted)' }}>

@@ -109,6 +109,22 @@ async def chat(
         current_redirect_context = None
         trip_count = 0
 
+        total_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "total_cost": 0.0
+        }
+
+        # Adiciona uso do supervisor se disponível
+        sup_usage = trace_log.get("supervisor", {}).get("usage", {})
+        if sup_usage:
+            for k in ["prompt_tokens", "completion_tokens", "total_tokens"]:
+                total_usage[k] += sup_usage.get(k, 0)
+            # Suporta tanto total_cost quanto cost (OpenRouter envia cost às vezes)
+            cost = sup_usage.get("total_cost", sup_usage.get("cost", 0.0))
+            total_usage["total_cost"] += float(cost)
+
         while True:
             trip_count += 1
             print(f"\n{'='*20} TRIP #{trip_count} {'='*20}")
@@ -217,6 +233,16 @@ async def chat(
                 
                 # O loop continua imediatamente com o LLM recebendo este novo contexto e respondendo ao usuário
 
+        # Agrega uso de todos os calls
+        for call in trace_log.get("calls", []):
+            usage = call.get("usage", {})
+            if usage:
+                for k in ["prompt_tokens", "completion_tokens", "total_tokens"]:
+                    total_usage[k] += usage.get(k, 0)
+                cost = usage.get("total_cost", usage.get("cost", 0.0))
+                total_usage["total_cost"] += float(cost)
+
+        trace_log["total_usage"] = total_usage
         trace_log["final_agent"] = agent_slug
         # Envia o log de trace no final da stream
         yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_log})}\n\n'
@@ -241,7 +267,7 @@ async def chat(
             title_prompt = f"Histórico recente:\\n{recent_context}\\n\\nNova mensagem: '{request.message}'\\n\\nGere um título direto e curto (até 5 palavras) resumindo o ASSUNTO ATUAL desta conversa. Retorne APENAS o novo título (sem aspas, sem pontuação). Atualize-o baseado no progresso."
             
             try:
-                bot_title = await openrouter.simple_complete(
+                result = await openrouter.simple_complete(
                     system_prompt="Você é um assistente cirúrgico focado em dar títulos curtíssimos e minimalistas para conversas.",
                     user_message=title_prompt,
                     model=settings.SUPERVISOR_MODEL,
@@ -249,6 +275,7 @@ async def chat(
                     max_tokens=20,
                     api_key=current_user.openrouter_key
                 )
+                bot_title = result["content"]
                 conv.title = bot_title.strip().strip('"').strip("'")
             except Exception:
                 if conv.message_count <= 2:

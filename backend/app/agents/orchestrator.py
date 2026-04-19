@@ -166,7 +166,7 @@ Nova mensagem do usuário: {user_message}
 Qual agente deve responder?"""
 
     try:
-        raw_output = await openrouter.simple_complete(
+        result = await openrouter.simple_complete(
             system_prompt=full_system,
             user_message=routing_message,
             model=model,
@@ -174,6 +174,8 @@ Qual agente deve responder?"""
             max_tokens=300,
             api_key=api_key
         )
+        raw_output = result["content"]
+        usage = result.get("usage", {})
         
         # Extração robusta do JSON
         clean_json = extract_json_block(raw_output)
@@ -201,7 +203,8 @@ Qual agente deve responder?"""
                 "system_prompt": full_system,
                 "input_sent": routing_message,
                 "raw_output": raw_output,
-                "parsed_data": data
+                "parsed_data": data,
+                "usage": usage
             }
         }
         
@@ -235,7 +238,7 @@ async def repair_agent_output(broken_content: str, repair_type: str = "expert", 
     temp = workspace.repair_temperature if (workspace and workspace.repair_temperature is not None) else settings.DEFAULT_REPAIR_TEMPERATURE
 
     try:
-        raw_repair = await openrouter.simple_complete(
+        result = await openrouter.simple_complete(
             system_prompt=system_repair,
             user_message=f"CONTEÚDO PARA REPARAR:\n---\n{broken_content}\n---",
             model=model,
@@ -243,6 +246,7 @@ async def repair_agent_output(broken_content: str, repair_type: str = "expert", 
             max_tokens=1000,
             api_key=api_key
         )
+        raw_repair = result["content"]
         
         # Extração robusta do JSON do reparo
         clean_repair = extract_json_block(raw_repair)
@@ -444,6 +448,11 @@ async def run_agent_stream(
             presence_penalty=agent.presence_penalty,
             api_key=api_key
         ):
+            if isinstance(chunk, dict) and "usage" in chunk:
+                if trace_log is not None:
+                    trace_log["usage"] = chunk["usage"]
+                continue
+
             if state == -1:
                 if trace_log is not None: trace_log["raw_ai_output"] += chunk
                 continue  # Já leu o output inteiro, ignora o fechamento das chaves do JSON

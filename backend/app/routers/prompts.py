@@ -164,7 +164,7 @@ async def test_prompt(
     model = data.model or (agent.model if agent else "openai/gpt-4o-mini")
 
     try:
-        response = await openrouter.simple_complete(
+        result = await openrouter.simple_complete(
             system_prompt=data.system_prompt,
             user_message=data.user_message,
             model=model,
@@ -172,6 +172,7 @@ async def test_prompt(
             max_tokens=1000,
             api_key=current_user.openrouter_key
         )
+        response = result["content"]
         return {
             "success": True,
             "response": response,
@@ -220,13 +221,14 @@ IMPORTANTE: Retorne APENAS o JSON. Não inclua conversas, explicações ou bloco
 """
 
     try:
-        response = await openrouter.simple_complete(
+        result = await openrouter.simple_complete(
             system_prompt=repair_prompt,
             user_message="Corrija o JSON acima.",
             model=model,
             temperature=0,
             api_key=current_user.openrouter_key
         )
+        response = result["content"]
         # Tira blocos markdown se a IA ignorar o comando
         clean = response.replace("```json", "").replace("```", "").strip()
         return json.loads(clean)
@@ -401,6 +403,14 @@ async def prompt_assistant_chat(
                 api_key=current_user.openrouter_key,
                 response_format=response_format
             ):
+                if isinstance(chunk, dict) and "usage" in chunk:
+                    u = chunk["usage"]
+                    trace_data["calls"][0]["usage"] = u
+                    # Normaliza custo para total_cost para a agregação
+                    cost = u.get("total_cost", u.get("cost", 0.0))
+                    trace_data["total_usage"] = {**u, "total_cost": float(cost)}
+                    continue
+                    
                 full_response += chunk
                 yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
             

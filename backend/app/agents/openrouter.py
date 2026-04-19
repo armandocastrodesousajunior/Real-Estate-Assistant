@@ -102,6 +102,7 @@ class OpenRouterClient:
             "frequency_penalty": frequency_penalty,
             "presence_penalty": presence_penalty,
             "stream": True,
+            "stream_options": {"include_usage": True}
         }
         if response_format:
             payload["response_format"] = response_format
@@ -132,10 +133,15 @@ class OpenRouterClient:
                                 break
                             try:
                                 chunk = json.loads(data)
-                                delta = chunk["choices"][0].get("delta", {})
-                                content = delta.get("content", "")
-                                if content:
-                                    yield content
+                                # OpenRouter with include_usage=True sends usage in a chunk where choices is empty
+                                if "usage" in chunk and chunk["usage"]:
+                                    yield {"usage": chunk["usage"]}
+                                
+                                if "choices" in chunk and len(chunk["choices"]) > 0:
+                                    delta = chunk["choices"][0].get("delta", {})
+                                    content = delta.get("content", "")
+                                    if content:
+                                        yield content
                             except (json.JSONDecodeError, KeyError, IndexError):
                                 continue
             except httpx.HTTPStatusError as e:
@@ -180,7 +186,9 @@ class OpenRouterClient:
             api_key=api_key,
             response_format=response_format,
         )
-        return result["choices"][0]["message"]["content"].strip()
+        content = result["choices"][0]["message"]["content"].strip()
+        usage = result.get("usage", {})
+        return {"content": content, "usage": usage}
 
 
 # Singleton global do client
