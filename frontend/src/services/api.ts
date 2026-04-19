@@ -226,6 +226,9 @@ export const feedbackAPI = {
   list: (agentSlug: string, params?: { rating?: string; page?: number; page_size?: number }) =>
     api.get(`/api/v1/feedback/${agentSlug}`, { params }),
 
+  listBySession: (sessionId: string) =>
+    api.get(`/api/v1/feedback/session/${sessionId}`),
+
   remove: (feedbackId: number) => api.delete(`/api/v1/feedback/${feedbackId}`),
 
   train: (agentSlug: string) => api.post(`/api/v1/feedback/${agentSlug}/train`),

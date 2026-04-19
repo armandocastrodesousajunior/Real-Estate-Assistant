@@ -58,6 +58,31 @@ async def submit_feedback(
     return {"id": fb.id, "rating": fb.rating, "message": "Feedback registrado com sucesso."}
 
 
+@router.get("/session/{session_id}", summary="Listar feedbacks de uma sessão específica")
+async def list_feedbacks_by_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(get_current_workspace),
+):
+    """Retorna todos os feedbacks de uma conversa específica para restaurar o estado visual no frontend."""
+    result = await db.execute(
+        select(MessageFeedback).where(
+            MessageFeedback.workspace_id == workspace.id,
+            MessageFeedback.session_id == session_id,
+        ).order_by(MessageFeedback.created_at.asc())
+    )
+    items = result.scalars().all()
+    return [
+        {
+            "id": fb.id,
+            "agent_slug": fb.agent_slug,
+            "ai_response": fb.ai_response,
+            "rating": fb.rating,
+        }
+        for fb in items
+    ]
+
+
 @router.get("/{agent_slug}", summary="Listar feedbacks de um agente")
 async def list_feedbacks(
     agent_slug: str,

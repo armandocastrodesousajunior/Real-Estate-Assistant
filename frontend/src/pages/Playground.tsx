@@ -51,8 +51,8 @@ export default function Playground() {
   const [promptAssistantMode, setPromptAssistantMode] = useState<'edit' | 'create'>('edit')
   const [activeChatContext, setActiveChatContext] = useState<any>(null)
 
-  // Feedback state
-  const [feedbackStates, setFeedbackStates] = useState<Map<number, 'positive' | 'negative'>>(new Map())
+  // Feedback state — stores { rating, feedbackId } per message index
+  const [feedbackStates, setFeedbackStates] = useState<Map<number, { rating: 'positive' | 'negative'; feedbackId: number }>>(new Map())
   const [feedbackModal, setFeedbackModal] = useState<{ open: boolean; msgIndex: number; msg: Message | null }>({
     open: false, msgIndex: -1, msg: null
   })
@@ -76,15 +76,40 @@ export default function Playground() {
 
   const loadConversation = async (sessionId: string) => {
     setActiveSession(sessionId); setIsStreaming(false); setStreamingText(''); setStreamingAgent(null); setActiveTool(null)
-    streamingTextRef.current = ''; streamingAgentRef.current = null; streamingTraceRef.current = null; activeToolRef.current = null; setMessages([])
+    streamingTextRef.current = ''; streamingAgentRef.current = null; streamingTraceRef.current = null; activeToolRef.current = null
+    setMessages([]); setFeedbackStates(new Map())
     try {
       const { data } = await chatAPI.getConversation(sessionId)
       if (!data?.messages) return
-      setMessages(data.messages.map((m: any) => ({ role: m.role, content: m.content, agentSlug: m.agent_slug, agentName: m.agent_name, agentEmoji: m.agent_emoji, metadata: m.metadata || m.metadata_ })))
+      const loadedMessages = data.messages.map((m: any) => ({ role: m.role, content: m.content, agentSlug: m.agent_slug, agentName: m.agent_name, agentEmoji: m.agent_emoji, metadata: m.metadata || m.metadata_ }))
+      setMessages(loadedMessages)
+
+      // Restaura o estado de feedbacks existentes no banco para esta sessao
+      try {
+        const { data: fbData } = await feedbackAPI.listBySession(sessionId)
+        if (fbData && fbData.length > 0) {
+          const newStates = new Map<number, { rating: 'positive' | 'negative'; feedbackId: number }>()
+          for (const fb of fbData) {
+            // Encontra o indice da mensagem da IA que corresponde a este feedback
+            const idx = loadedMessages.findIndex(
+              (m: any, i: number) => m.role === 'assistant' && m.content === fb.ai_response
+                && loadedMessages.slice(0, i).reverse().some((prev: any) => prev.role === 'user')
+            )
+            if (idx !== -1) {
+              // Se ja tem um feedback para este indice, mantem o mais recente (maior id)
+              const existing = newStates.get(idx)
+              if (!existing || fb.id > existing.feedbackId) {
+                newStates.set(idx, { rating: fb.rating as 'positive' | 'negative', feedbackId: fb.id })
+              }
+            }
+          }
+          setFeedbackStates(newStates)
+        }
+      } catch {}
     } catch { setActiveSession(null) }
   }
 
-  const newChat = () => { setActiveSession(null); setMessages([]); setStreamingText(''); setActiveTool(null); activeToolRef.current = null }
+  const newChat = () => { setActiveSession(null); setMessages([]); setStreamingText(''); setActiveTool(null); activeToolRef.current = null; setFeedbackStates(new Map()) }
 
   const deleteConversation = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -255,13 +280,27 @@ export default function Playground() {
   // ── Feedback handlers ────────────────────────────────────────────────────────
 
   const handlePositiveFeedback = async (index: number, msg: Message) => {
-    if (feedbackStates.has(index)) return  // já avaliado
+    const existing = feedbackStates.get(index)
     const prevUserMsg = messages.slice(0, index).reverse().find(m => m.role === 'user')
     const agentSlug = msg.agentSlug || selectedAgentSlug
     if (!agentSlug) return
 
+    // Clicou no mesmo botão já ativo — desfaz o feedback (undo)
+    if (existing?.rating === 'positive') {
+      try {
+        await feedbackAPI.remove(existing.feedbackId)
+        setFeedbackStates(prev => { const m = new Map(prev); m.delete(index); return m })
+      } catch (e) { console.error('Erro ao desfazer feedback', e) }
+      return
+    }
+
+    // Se havia um dislike antes, deleta ele primeiro (troca de rating)
+    if (existing?.rating === 'negative') {
+      try { await feedbackAPI.remove(existing.feedbackId) } catch {}
+    }
+
     try {
-      await feedbackAPI.submit({
+      const res = await feedbackAPI.submit({
         agent_slug: agentSlug,
         user_message: prevUserMsg?.content || '',
         ai_response: msg.content,
@@ -269,14 +308,20 @@ export default function Playground() {
         model_used: msg.metadata?.supervisor?.model,
         session_id: activeSession || undefined,
       })
-      setFeedbackStates(prev => new Map(prev).set(index, 'positive'))
-    } catch (e) {
-      console.error('Erro ao salvar feedback positivo', e)
-    }
+      setFeedbackStates(prev => new Map(prev).set(index, { rating: 'positive', feedbackId: res.data.id }))
+    } catch (e) { console.error('Erro ao salvar feedback positivo', e) }
   }
 
   const handleNegativeFeedback = (index: number, msg: Message) => {
-    if (feedbackStates.has(index)) return  // já avaliado
+    // Permite abrir o modal mesmo que já haja um like (para trocar)
+    // Se já é dislike, o clique desfaz
+    const existing = feedbackStates.get(index)
+    if (existing?.rating === 'negative') {
+      // Clicou no mesmo — desfaz (undo)
+      feedbackAPI.remove(existing.feedbackId).catch(() => {})
+      setFeedbackStates(prev => { const m = new Map(prev); m.delete(index); return m })
+      return
+    }
     setFeedbackModal({ open: true, msgIndex: index, msg })
   }
 
@@ -289,7 +334,13 @@ export default function Playground() {
 
     setFeedbackLoading(true)
     try {
-      await feedbackAPI.submit({
+      // Se havia um like antes, deleta ele primeiro
+      const existing = feedbackStates.get(msgIndex)
+      if (existing) {
+        try { await feedbackAPI.remove(existing.feedbackId) } catch {}
+      }
+
+      const res = await feedbackAPI.submit({
         agent_slug: agentSlug,
         user_message: prevUserMsg?.content || '',
         ai_response: msg.content,
@@ -298,13 +349,10 @@ export default function Playground() {
         model_used: msg.metadata?.supervisor?.model,
         session_id: activeSession || undefined,
       })
-      setFeedbackStates(prev => new Map(prev).set(msgIndex, 'negative'))
+      setFeedbackStates(prev => new Map(prev).set(msgIndex, { rating: 'negative', feedbackId: res.data.id }))
       setFeedbackModal({ open: false, msgIndex: -1, msg: null })
-    } catch (e) {
-      console.error('Erro ao salvar feedback negativo', e)
-    } finally {
-      setFeedbackLoading(false)
-    }
+    } catch (e) { console.error('Erro ao salvar feedback negativo', e) }
+    finally { setFeedbackLoading(false) }
   }
 
   const currentAgent = selectedAgentSlug ? agents.find(a => a.slug === selectedAgentSlug) : null
@@ -475,33 +523,31 @@ export default function Playground() {
                               <Activity size={12} />
                             </button>
                           )}
-                          {/* Separador — empurra os botoes de feedback para a direita */}
+                          {/* Separador */}
                           <div style={{ flex: 1 }} />
                           {/* Direita: feedback */}
                           <button
                             className="msg-action-btn"
-                            data-tooltip="Boa resposta"
+                            data-tooltip={state?.rating === 'positive' ? 'Desfazer like' : 'Boa resposta'}
                             onClick={() => handlePositiveFeedback(i, msg)}
                             style={{
                               borderRadius: '8px',
-                              background: state === 'positive' ? 'rgba(16,185,129,0.15)' : 'transparent',
-                              borderColor: state === 'positive' ? 'rgba(16,185,129,0.4)' : 'transparent',
-                              color: state === 'positive' ? 'var(--accent)' : 'var(--text-muted)',
-                              cursor: state ? 'default' : 'pointer',
+                              background: state?.rating === 'positive' ? 'rgba(16,185,129,0.15)' : 'transparent',
+                              borderColor: state?.rating === 'positive' ? 'rgba(16,185,129,0.4)' : 'transparent',
+                              color: state?.rating === 'positive' ? 'var(--accent)' : 'var(--text-muted)',
                             }}
                           >
                             <ThumbsUp size={12} />
                           </button>
                           <button
                             className="msg-action-btn"
-                            data-tooltip="Resposta ruim — sugerir melhoria"
+                            data-tooltip={state?.rating === 'negative' ? 'Desfazer dislike' : 'Resposta ruim — sugerir melhoria'}
                             onClick={() => handleNegativeFeedback(i, msg)}
                             style={{
                               borderRadius: '8px',
-                              background: state === 'negative' ? 'var(--error-dim)' : 'transparent',
-                              borderColor: state === 'negative' ? 'rgba(239,68,68,0.4)' : 'transparent',
-                              color: state === 'negative' ? 'var(--error)' : 'var(--text-muted)',
-                              cursor: state ? 'default' : 'pointer',
+                              background: state?.rating === 'negative' ? 'var(--error-dim)' : 'transparent',
+                              borderColor: state?.rating === 'negative' ? 'rgba(239,68,68,0.4)' : 'transparent',
+                              color: state?.rating === 'negative' ? 'var(--error)' : 'var(--text-muted)',
                             }}
                           >
                             <ThumbsDown size={12} />
