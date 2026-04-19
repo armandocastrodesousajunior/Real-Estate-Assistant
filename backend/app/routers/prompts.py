@@ -468,6 +468,11 @@ async def prompt_assistant_chat(
         
         while current_turn < max_turns:
             current_turn += 1
+            
+            # Se for um turno subsequente (após tool_call), solicita que o frontend limpe o buffer
+            if current_turn > 1:
+                yield f'data: {json.dumps({"type": "clear_streaming"})}\n\n'
+                
             full_response = ""
             current_trace_call = {
                 "agent": "AI Engineer",

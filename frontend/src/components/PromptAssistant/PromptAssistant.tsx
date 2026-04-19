@@ -173,35 +173,62 @@ function sanitizeJSON(str: string): string {
 // ─── Unified JSON Parser ───────────────────────────────────────────────────
 function parseAssistantResponse(raw: string): StandardResponse | null {
   try {
-    // 1. Try to find JSON block
-    const blockMatch = raw.match(/```(?:json)?\n?([\s\S]*?({[\s\S]*?})[\s\S]*?)```/);
-    let jsonStr = blockMatch ? blockMatch[2] : null;
+    const objects: any[] = [];
+    let braceCount = 0;
+    let start = -1;
     
-    // 2. Try raw object if no block
-    if (!jsonStr) {
-      const rawMatch = raw.match(/({[\s\S]*})/);
-      if (rawMatch) jsonStr = rawMatch[1];
+    // Scan for top-level JSON objects
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] === '{') {
+        if (braceCount === 0) start = i;
+        braceCount++;
+      } else if (raw[i] === '}') {
+        braceCount--;
+        if (braceCount === 0 && start !== -1) {
+          try {
+            const part = raw.slice(start, i + 1);
+            const cleaned = sanitizeJSON(part);
+            objects.push(JSON.parse(cleaned));
+          } catch {}
+          start = -1;
+        }
+      }
     }
     
-    if (!jsonStr) return null;
+    if (objects.length === 0) return null;
     
-    const cleaned = sanitizeJSON(jsonStr);
-    const parsed = JSON.parse(cleaned);
-    
-    // Map fields to unified response
-    // RealtyAI Standard: type, response.output
-    // Legacy: action, message/summary
-    const rawAction = parsed.type || parsed.action || (parsed.edits ? 'patch' : parsed.agent_spec ? 'create' : 'chat');
-    
-    // RealtyAI Standard: type "response" is a chat message
-    const finalAction = (rawAction === 'response' || !rawAction) ? 'chat' : rawAction;
-    const finalMessage = parsed.response?.output || parsed.message || parsed.summary || (typeof parsed === 'string' ? parsed : "");
+    // We might have multiple turn objects concatenated.
+    // Prioritize the human response or a patch as the primary "message".
+    // We flatten the objects into a single StandardResponse if possible or pick the most relevant.
+    const finalData: any = { action: 'chat', message: '', edits: [], tool_calls: [] };
+
+    for (const obj of objects) {
+      if (obj.type === 'tool_call') {
+        if (obj.tool_call) finalData.tool_calls.push(obj.tool_call);
+      }
+      
+      const rawAction = obj.type || obj.action;
+      if (rawAction === 'patch' || obj.edits) {
+        finalData.action = 'patch';
+        if (obj.edits) finalData.edits.push(...obj.edits);
+        if (obj.response?.output || obj.message) {
+          finalData.message = obj.response?.output || obj.message;
+        }
+      } else if (rawAction === 'response' || rawAction === 'chat' || obj.response) {
+        finalData.message = obj.response?.output || obj.message || finalData.message;
+      } else if (rawAction === 'create' || obj.agent_spec) {
+        finalData.action = 'create';
+        finalData.agent_spec = obj.agent_spec;
+        finalData.message = obj.response?.output || obj.message || "Especialista criado com sucesso.";
+      }
+    }
 
     return {
-      action: finalAction,
-      message: finalMessage,
-      edits: parsed.edits,
-      agent_spec: parsed.agent_spec
+      action: finalData.action,
+      message: finalData.message,
+      edits: finalData.edits.length > 0 ? finalData.edits : undefined,
+      agent_spec: finalData.agent_spec,
+      tool_calls: finalData.tool_calls.length > 0 ? finalData.tool_calls : undefined
     } as StandardResponse;
   } catch (e) {
     console.warn("Falha ao analisar resposta do assistente:", e);
@@ -347,6 +374,9 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
               setAiStatus(event.content);
             } else if (event.type === 'debug_trace') {
               streamingTraceRef.current = event.trace;
+            } else if (event.type === 'clear_streaming') {
+              streamingTextRef.current = '';
+              setStreamingText('');
             } else if (event.type === 'error') {
               streamingTextRef.current = `❌ Error: ${event.message || 'Unknown error occurred'}`;
               setStreamingText(streamingTextRef.current);
@@ -847,15 +877,37 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                         }
 
                         // Fallback: If no component was rendered, show content while preserving code blocks
-                        const contentToShow = data ? (data.message || JSON.stringify(data, null, 2)) : m.content;
+                        const toolCallsUI = data?.tool_calls?.map((tc: any, i: number) => (
+                           <div key={i} style={{ 
+                             display: 'flex', alignItems: 'center', gap: '8px', 
+                             padding: '6px 10px', background: 'rgba(59, 130, 246, 0.08)', 
+                             borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.15)',
+                             fontSize: '0.7rem', color: 'var(--accent)', marginBottom: '8px',
+                             maxWidth: 'fit-content'
+                           }}>
+                             <Activity size={12} />
+                             <span>Ação Automática: Inspecionando <strong>{tc.resource_slug}</strong></span>
+                           </div>
+                        ));
+
+                        const contentToShow = data?.message || (data ? "" : m.content);
+                        
                         return (
                           <div style={{ position: 'relative' }}>
-                            <div dangerouslySetInnerHTML={{ 
-                               __html: contentToShow
-                                 .replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg-card); padding:8px; border-radius:4px; overflow:auto; font-size:0.75rem; margin:8px 0; border:1px solid var(--border);"><code>$1</code></pre>')
-                                 .replace(/\n/g, '<br/>')
-                                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
-                            }} />
+                            {toolCallsUI}
+                            {contentToShow && (
+                              <div dangerouslySetInnerHTML={{ 
+                                __html: contentToShow
+                                  .replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg-card); padding:8px; border-radius:4px; overflow:auto; font-size:0.75rem; margin:8px 0; border:1px solid var(--border);"><code>$1</code></pre>')
+                                  .replace(/\n/g, '<br/>')
+                                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+                              }} />
+                            )}
+                            
+                            {!contentToShow && !data?.tool_calls && (
+                              <pre style={{ fontSize: '0.7rem', opacity: 0.6 }}>{m.content}</pre>
+                            )}
+
                             {m.metadata && (
                               <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(m.metadata)}>
                                 <Activity size={12} />
