@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     DEFAULT_SUPERVISOR_MODEL: str = "openai/gpt-4o-mini"
     DEFAULT_SUPERVISOR_TEMPERATURE: float = 0.1
     
-    DEFAULT_PROMPT_ASSISTANT_MODEL: str = "openai/gpt-4o-mini"
+    DEFAULT_PROMPT_ASSISTANT_MODEL: str = "google/gemini-2.0-flash-exp"
     DEFAULT_PROMPT_ASSISTANT_TEMPERATURE: float = 0.5
     
     DEFAULT_REPAIR_MODEL: str = "openai/gpt-4o-mini"

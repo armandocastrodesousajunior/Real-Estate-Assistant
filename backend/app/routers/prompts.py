@@ -391,7 +391,7 @@ async def prompt_assistant_chat(
     if tools_content:
         messages.append({
             "role": "user",
-            "content": f"[CATÁLOGO DE FERRAMENTAS DO SISTEMA]\nAqui estão as automações (internas e externas) que podem ser integradas aos agentes. \n\n{tools_content}\n\n⚠️ **ATENÇÃO (REGRA DE SEGURANÇA):** O catálogo acima lista o que é POSSÍVEL no sistema. Ele NÃO indica que o agente atual tem permissão/vínculo para usar essas ferramentas. Antes de sugerir ou configurar o uso de ferramentas, você DEVE obrigatoriamente usar 'inspect_system_resource' para verificar o campo `linked_tools` do agente em questão. Se o vínculo não existir, avise o usuário.\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA]"
+            "content": f"[CATÁLOGO DE FERRAMENTAS DO SISTEMA]\nAqui estão as automações (internas e externas) que podem ser integradas aos agentes. \n\n{tools_content}\n\n⚠️ **ATENÇÃO (REGRA DE SEGURANÇA):** O catálogo acima lista o que é POSSÍVEL no sistema. Ele NÃO indica que o agente atual tem permissão para usar essas ferramentas. Antes de sugerir ou configurar o uso de ferramentas, você DEVE obrigatoriamente usar 'inspect_system_resource' para verificar as permissões reais do agente. Se o vínculo não existir, oriente o usuário a vincular nas configurações. **REGRA DE OURO**: Se o usuário disser que corrigiu um vínculo, você DEVE inspecionar novamente para confirmar antes de agir. Evite termos técnicos como 'linked_tools' ou 'banco de dados' na conversa.\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA]"
         })
         messages.append({
             "role": "assistant",
