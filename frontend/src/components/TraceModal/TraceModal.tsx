@@ -101,12 +101,11 @@ const CodeBlock = ({ title, icon: Icon, content, variant = 'default' }: { title:
 }
 
 const AssistantContextCard = ({ content }: { content: string }) => {
-  // Regex to identify blocks
   const blocks = [
-    { id: 'ECOSYSTEM', label: 'Ecossistema Multi-Agente', icon: List, regex: /\[ECOSSISTEMA DE AGENTES DO WORKSPACE\]([\s\S]*?)\[\/ECOSSISTEMA DE AGENTES DO WORKSPACE\]/ },
-    { id: 'TOOLS', label: 'Catálogo de Ferramentas do Sistema', icon: Wrench, regex: /\[CATÁLOGO DE FERRAMENTAS DO SISTEMA\]([\s\S]*?)\[\/CATÁLOGO DE FERRAMENTAS DO SISTEMA\]/ },
-    { id: 'PROMPT', label: 'Prompt Atual (Em Edição)', icon: FileText, regex: /\[PROMPT ATUAL\]([\s\S]*?)\[\/PROMPT ATUAL\]/ },
-    { id: 'ANALYSIS', label: 'Análise de Histórico / Logs', icon: Terminal, regex: /\[CONTEXTO DA CONVERSA - ANÁLISE\]([\s\S]*?)\[\/CONTEXTO DA CONVERSA - ANÁLISE\]/ }
+    { id: 'ECOSYSTEM', label: 'Ecosystem Architecture (Skeleton)', icon: List, regex: /\[(?:ECOSSISTEMA DE AGENTES DO WORKSPACE|CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA)(?: - VISÃO REDUZIDA)?\]([\s\S]*?)\[\/(?:ECOSSISTEMA DE AGENTES DO WORKSPACE|CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA)(?: - VISÃO REDUZIDA)?\]/ },
+    { id: 'TOOLS', label: 'System Tools Catalog (Skeleton)', icon: Wrench, regex: /\[CATÁLOGO DE FERRAMENTAS DO SISTEMA(?: - VISÃO REDUZIDA)?\]([\s\S]*?)\[\/CATÁLOGO DE FERRAMENTAS DO SISTEMA(?: - VISÃO REDUZIDA)?\]/ },
+    { id: 'PROMPT', label: 'Current System Prompt (Subject)', icon: FileText, regex: /\[PROMPT ATUAL\]([\s\S]*?)\[\/PROMPT ATUAL\]/ },
+    { id: 'ANALYSIS', label: 'Interaction Context Analysis', icon: Terminal, regex: /\[CONTEXTO DA CONVERSA - ANÁLISE\]([\s\S]*?)\[\/CONTEXTO DA CONVERSA - ANÁLISE\]/ }
   ];
 
   const foundBlocks = blocks.map(b => {
@@ -224,8 +223,8 @@ const AgentTraceStep = ({ call, stepNumber, isLast }: { call: TraceCall; stepNum
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div className="text-xs text-muted font-mono mb-1">
-                Passo {stepNumber} • {
-                  call.tool_call ? 'Chamada de Ferramenta (Tool Call)' :
+                Passo {stepNumber} {call.turn ? `(Rodada ${call.turn} de Pensamento)` : ''} • {
+                  call.tool_call ? 'Pesquisa de Contexto / Tool' :
                   call.success ? 'Resposta Final' : 'Avaliação e Handoff'
                 }
               </div>

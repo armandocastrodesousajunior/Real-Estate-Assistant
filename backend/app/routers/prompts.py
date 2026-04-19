@@ -17,9 +17,58 @@ from app.models.tool import Tool
 from app.core.tools_registry import get_all_internal_tools
 from app.schemas.chat import PromptSchema, PromptUpdate, PromptTest, PromptAssistantRequest
 from app.agents.openrouter import openrouter, OpenRouterError
+from app.core.tools_registry import get_all_internal_tools, INTERNAL_TOOLS
 from loguru import logger
 
 router = APIRouter()
+
+async def inspect_assistant_resource(db: AsyncSession, workspace_id: int, resource_type: str, slug: str):
+    """Auxiliar para buscar detalhes completos de um agente ou ferramenta."""
+    if resource_type == "agent":
+        agent_res = await db.execute(
+            select(Agent).where(Agent.slug == slug, Agent.workspace_id == workspace_id)
+        )
+        agent = agent_res.scalar_one_or_none()
+        if not agent:
+            return f"Erro: Agente '{slug}' não encontrado."
+        
+        p_res = await db.execute(
+            select(Prompt).where(
+                Prompt.agent_id == agent.id,
+                Prompt.is_active == True,
+                Prompt.workspace_id == workspace_id
+            )
+        )
+        prompt = p_res.scalar_one_or_none()
+        return {
+            "name": agent.name,
+            "slug": agent.slug,
+            "description": agent.description,
+            "system_prompt": prompt.system_prompt if prompt else "Sem prompt configurado."
+        }
+    
+    elif resource_type == "tool":
+        # Busca interna
+        for cat in INTERNAL_TOOLS.values():
+            for t in cat:
+                if t["slug"] == slug:
+                    return t
+        
+        # Busca externa
+        ext_res = await db.execute(
+            select(Tool).where(Tool.slug == slug, Tool.workspace_id == workspace_id)
+        )
+        tool = ext_res.scalar_one_or_none()
+        if tool:
+            return {
+                "name": tool.name,
+                "slug": tool.slug,
+                "description": tool.description,
+                "prompt": tool.prompt
+            }
+        return f"Erro: Ferramenta '{slug}' não encontrada."
+    
+    return "Erro: Tipo de recurso inválido."
 
 
 @router.get(
@@ -285,72 +334,56 @@ async def prompt_assistant_chat(
         workspace_agents = agents_res.scalars().all()
         
         for agent in workspace_agents:
-            # Busca o prompt ativo de cada agente
-            p_res = await db.execute(
-                select(Prompt).where(
-                    Prompt.agent_id == agent.id,
-                    Prompt.is_active == True,
-                    Prompt.workspace_id == workspace.id
-                )
-            )
-            active_p = p_res.scalar_one_or_none()
-            
             is_current = (req.mode == "edit" and agent.slug == req.agent_slug)
-            
             tag_atual = ' [ESTE É O AGENTE QUE VOCÊ ESTÁ EDITANDO AGORA]' if is_current else ''
-            ecosystem_content += f"\n-- AGENTE: {agent.name} (slug: {agent.slug}){tag_atual} --\n"
-            ecosystem_content += f"Descrição: {agent.description}\n"
+            ecosystem_content += f"\n- {agent.name} (slug: {agent.slug}){tag_atual}\n"
+            ecosystem_content += f"  Papel: {agent.description}\n"
             
-            if active_p:
-                # Se for o agente sendo editado, usamos o prompt que veio do frontend (mais atual) ou o do banco
-                p_text = req.current_prompt if (is_current and req.current_prompt) else active_p.system_prompt
-                ecosystem_content += f"Prompt do Sistema:\n{p_text}\n"
-            
-            ecosystem_content += f"{'-'*30}\n"
-            
-        ecosystem_content = f"\n[ECOSSISTEMA DE AGENTES DO WORKSPACE]\n{ecosystem_content}\n[/ECOSSISTEMA DE AGENTES DO WORKSPACE]\n"
+        ecosystem_content = f"\n[ECOSSISTEMA DE AGENTES DO WORKSPACE - VISÃO REDUZIDA]\n{ecosystem_content}\n[/ECOSSISTEMA DE AGENTES DO WORKSPACE - VISÃO REDUZIDA]\n"
     except Exception as e:
         logger.error(f"Erro ao carregar ecossistema: {e}")
     
-    # 4. Carrega o catálogo de ferramentas (Internas e Externas)
+    # 4. Carrega o catálogo de ferramentas (Skeleton)
     tools_content = ""
     try:
-        # Ferramentas Internas
         internal_tools = get_all_internal_tools()
         for t in internal_tools:
-            tools_content += f"\n-- TOOL: {t['name']} (slug: {t['slug']}) [INTERNA] --\n"
-            tools_content += f"Descrição: {t['description']}\n"
-            tools_content += f"Prompt de Uso: {t['prompt']}\n"
+            tools_content += f"- {t['name']} (slug: {t['slug']}) [INTERNA]: {t['description'][:100]}...\n"
             
-        # Ferramentas Externas do Workspace
         ext_tools_res = await db.execute(
             select(Tool).where(Tool.workspace_id == workspace.id, Tool.is_active == True)
         )
         external_tools = ext_tools_res.scalars().all()
         for t in external_tools:
-            tools_content += f"\n-- TOOL: {t.name} (slug: {t.slug}) [EXTERNA] --\n"
-            tools_content += f"Descrição: {t.description}\n"
-            tools_content += f"Prompt de Uso: {t.prompt}\n"
+            tools_content += f"- {t.name} (slug: {t.slug}) [EXTERNA]: {t.description[:100]}...\n"
             
-        tools_content = f"\n[CATÁLOGO DE FERRAMENTAS DO SISTEMA]\n{tools_content}\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA]\n"
+        tools_content = f"\n[CATÁLOGO DE FERRAMENTAS DO SISTEMA - VISÃO REDUZIDA]\n{tools_content}\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA - VISÃO REDUZIDA]\n"
     except Exception as e:
         logger.error(f"Erro ao carregar catálogo de ferramentas: {e}")
 
-    # 5. Injeta os blocos técnicos no system prompt do assistente
-    system_prompt += f"\n\n{ecosystem_content}\n{tools_content}"
-
-    # 4. Monta o histórico
+    # 5. Monta o histórico (Hierarquia Profissional)
     messages = [{"role": "system", "content": system_prompt}]
     
-    # Injeta a visão global do ecossistema como contexto inicial
+    # Injeta a visão global do ecossistema como contexto inicial (USER)
     if ecosystem_content:
         messages.append({
             "role": "user",
-            "content": f"[ECOSSISTEMA DE AGENTES DO WORKSPACE]\nVocê está operando dentro de uma estrutura multi-agente. Abaixo estão os detalhes de todos os agentes configurados neste workspace. Use estas informações para garantir que os prompts sejam coerentes entre si e que não haja sobreposição de funções:\n\n{ecosystem_content}\n\n[/ECOSSISTEMA DE AGENTES DO WORKSPACE]"
+            "content": f"[CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA]\nVocê está operando dentro de uma arquitetura multi-agente complexa. Abaixo está a visão skeleton (reduzida) de todos os colegas especialistas disponíveis neste workspace. \n\n{ecosystem_content}\n\nORIENTAÇÃO: Use esta lista para garantir que suas sugestões mantenham a coerência sistêmica. Se precisar ver o prompt de algum agente, use a ferramenta 'inspect_system_resource'.\n[/CONFIGURAÇÃO ORIENTADA A ECOSSISTEMA]"
         })
         messages.append({
             "role": "assistant",
-            "content": "Entendido. Analisei o ecossistema completo de agentes do workspace. Estou ciente de todas as personas, responsabilidades e prompts configurados. Vou garantir que minhas sugestões e edições mantenham a coerência sistêmica e evitem sobreposições."
+            "content": "Entendido. Analisei a estrutura do ecossistema e identifiquei os agentes disponíveis. Estou pronto para atuar de forma coordenada, respeitando as responsabilidades de cada especialista."
+        })
+
+    # Injeta o catálogo de ferramentas (USER)
+    if tools_content:
+        messages.append({
+            "role": "user",
+            "content": f"[CATÁLOGO DE FERRAMENTAS DO SISTEMA]\nAqui estão as automações (internas e externas) que podem ser integradas aos agentes. \n\n{tools_content}\n\nORIENTAÇÃO: Antes de sugerir o uso detalhado de uma ferramenta, use 'inspect_system_resource' para validar suas instruções.\n[/CATÁLOGO DE FERRAMENTAS DO SISTEMA]"
+        })
+        messages.append({
+            "role": "assistant",
+            "content": "Confirmado. Registrei o catálogo de ferramentas e as respectivas capacidades de automação. Usarei a inspeção profunda quando necessário."
         })
     
     # Injeta o contexto da conversa se o usuário selecionou uma mensagem para debug
@@ -403,62 +436,116 @@ async def prompt_assistant_chat(
         model = workspace.prompt_assistant_model if (workspace and workspace.prompt_assistant_model) else settings.DEFAULT_PROMPT_ASSISTANT_MODEL
         temp = workspace.prompt_assistant_temperature if (workspace and workspace.prompt_assistant_temperature is not None) else settings.DEFAULT_PROMPT_ASSISTANT_TEMPERATURE
 
-        full_response = ""
-        try:
-            # Emit debug trace event with the context
-            trace_data = {
-                "supervisor_selection": f"Prompt Assistant ({req.mode})",
-                "supervisor": {
-                    "model": model, 
-                    "temperature": temp,
-                    "reason": f"Atuando em modo {req.mode} para {'edição' if req.mode=='edit' else 'criação'} de prompt."
-                },
-                "calls": [
-                    {
-                        "agent": "AI Engineer",
-                        "messages": messages,
-                        "model": model
-                    }
-                ]
-            }
-            yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
+        # Agregação de uso para múltiplos turnos
+        total_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "total_cost": 0.0
+        }
 
-            # Define response format if model supports it (OpenAI models and some others)
-            response_format = None
-            if any(m in model for m in ["gpt-4", "gpt-3.5", "claude-3"]):
-                response_format = {"type": "json_object"}
+        trace_data = {
+            "supervisor_selection": f"Prompt Assistant ({req.mode})",
+            "supervisor": {
+                "model": model, 
+                "temperature": temp,
+                "reason": f"Atuando em modo {req.mode} para {'edição' if req.mode=='edit' else 'criação'} de prompt."
+            },
+            "calls": []
+        }
+
+        response_format = None
+        if any(m in model for m in ["gpt-4", "gpt-3.5", "claude-3"]):
+            response_format = {"type": "json_object"}
+
+        max_turns = 3
+        current_turn = 0
+        
+        while current_turn < max_turns:
+            current_turn += 1
+            full_response = ""
+            current_trace_call = {
+                "agent": "AI Engineer",
+                "messages": list(messages),
+                "model": model,
+                "turn": current_turn
+            }
 
             async for chunk in openrouter.chat_completion_stream(
-                model=model,
                 messages=messages,
+                model=model,
                 temperature=temp,
-                max_tokens=2048,
-                api_key=current_user.openrouter_key,
-                response_format=response_format
+                response_format=response_format,
+                api_key=current_user.openrouter_key
             ):
                 if isinstance(chunk, dict) and "usage" in chunk:
                     u = chunk["usage"]
-                    trace_data["calls"][0]["usage"] = u
-                    # Normaliza custo para total_cost para a agregação
+                    current_trace_call["usage"] = u
+                    # Somar uso global
+                    total_usage["prompt_tokens"] += u.get("prompt_tokens", 0)
+                    total_usage["completion_tokens"] += u.get("completion_tokens", 0)
+                    total_usage["total_tokens"] += u.get("total_tokens", 0)
                     cost = u.get("total_cost", u.get("cost", 0.0))
-                    trace_data["total_usage"] = {**u, "total_cost": float(cost)}
+                    total_usage["total_cost"] += float(cost)
                     continue
                     
                 full_response += chunk
-                yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
-            
-            # Update trace with final response
-            trace_data["calls"][0]["raw_ai_output"] = full_response
-            yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
 
-            logger.info(f"Prompt Assistant [Mode: {req.mode}] Response: {full_response}")
-            yield f'data: {json.dumps({"type": "done"})}\n\n'
-        except OpenRouterError as e:
-            logger.error(f"OpenRouter Error in prompt assistant: {e}")
-            yield f'data: {json.dumps({"type": "error", "message": f"Erro na IA: {str(e)}"})}\n\n'
-        except Exception as e:
-            logger.error(f"Error in prompt assistant loop: {e}")
-            yield f'data: {json.dumps({"type": "error", "message": "Erro ao gerar resposta"})}\n\n'
+            # Fim do stream desta rodada
+            trace_data["calls"].append(current_trace_call)
+            trace_data["total_usage"] = total_usage
+            
+            # Tenta decodificar para ver se é tool_call
+            try:
+                # Limpa markdown se houver
+                clean_json = full_response.replace("```json", "").replace("```", "").strip()
+                data = json.loads(clean_json)
+                
+                if data.get("type") == "tool_call":
+                    tool_data = data.get("tool_call", {})
+                    res_type = tool_data.get("resource_type")
+                    res_slug = tool_data.get("resource_slug")
+                    
+                    if res_type and res_slug:
+                        # Envia evento de status para UI
+                        status_msg = f"Inspecionando {res_type} '{res_slug}'..."
+                        yield f'data: {json.dumps({"type": "status", "content": status_msg})}\n\n'
+                        
+                        # Executa ferramenta
+                        result = await inspect_assistant_resource(db, workspace.id, res_type, res_slug)
+                        
+                        # Atribui para o trace renderizar na UI
+                        current_trace_call["tool_call"] = {
+                            "name": "inspect_system_resource",
+                            "arguments": tool_data
+                        }
+                        current_trace_call["tool_result"] = result
+                        current_trace_call["raw_ai_output"] = full_response
+                        current_trace_call["success"] = True
+
+                        # Adiciona ao histórico do loop
+                        messages.append({"role": "assistant", "content": full_response})
+                        messages.append({"role": "user", "content": f"[RESULTADO DA INSPEÇÃO]\n{json.dumps(result, ensure_ascii=False, indent=2)}"})
+                        
+                        # Emite trace atualizado
+                        yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
+                        continue # Volta para o while
+                
+                # Se não for tool_call, é o resultado final
+                current_trace_call["success"] = True
+                current_trace_call["raw_ai_output"] = full_response
+                yield f'data: {full_response}\n\n'
+                yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
+                break # Sai do loop
+
+            except Exception as e:
+                # Se falhar o parse, provavelmente é uma resposta comum ou erro
+                logger.warning(f"Falha no parse do loop do assistente: {e}")
+                yield f'data: {full_response}\n\n'
+                yield f'data: {json.dumps({"type": "debug_trace", "trace": trace_data})}\n\n'
+                break
+
+        yield "event: close\ndata: [DONE]\n\n"
 
     return StreamingResponse(
         event_stream(),

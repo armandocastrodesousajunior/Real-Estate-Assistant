@@ -108,6 +108,14 @@ INTERNAL_TOOLS = {
             "description": "Associa um ou mais imóveis de interesse ao cadastro do lead.",
             "prompt": "Informe 'lead_id' e 'property_ids' (lista)."
         }
+    ],
+    "system": [
+        {
+            "slug": "inspect_system_resource",
+            "name": "Inspecionar Recurso do Sistema",
+            "description": "Retorna os detalhes técnicos completos (System Prompt, Instruções de Uso) de um agente ou ferramenta específica do workspace.",
+            "prompt": "Informe o 'resource_type' ('agent' ou 'tool') e o 'resource_slug' do item que deseja inspecionar."
+        }
     ]
 }
 
