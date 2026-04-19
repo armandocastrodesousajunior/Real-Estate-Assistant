@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Plus, Send, Trash2, Activity, Home, MessageSquare, Bot,
-  Save, RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Search as SearchIcon, History as HistoryIcon, Info
+  Save, RotateCcw, Sliders, ChevronRight, X, Pencil, Wrench, Search as SearchIcon, History as HistoryIcon, Info,
+  ThumbsUp, ThumbsDown
 } from 'lucide-react'
-import { chatAPI, agentsAPI, promptsAPI, toolsAPI } from '../services/api'
+import { chatAPI, agentsAPI, promptsAPI, toolsAPI, feedbackAPI } from '../services/api'
 import TraceModal from '../components/TraceModal/TraceModal'
+import FeedbackModal from '../components/FeedbackModal/FeedbackModal'
 import AgentIcon from '../components/AgentIcon'
 import PromptAssistant from '../components/PromptAssistant/PromptAssistant'
 import type { AgentSpec } from '../types/agent'
@@ -45,9 +47,16 @@ export default function Playground() {
   const [modelSearchTerm, setModelSearchTerm] = useState('')
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   
-  const [isPromptAssistantOpen, setIsPromptAssistantOpen] = useState(false)
+  const [isPromptAssistantOpen, setIsPromptAssistantOpen] = useState<boolean>(false)
   const [promptAssistantMode, setPromptAssistantMode] = useState<'edit' | 'create'>('edit')
   const [activeChatContext, setActiveChatContext] = useState<any>(null)
+
+  // Feedback state
+  const [feedbackStates, setFeedbackStates] = useState<Map<number, 'positive' | 'negative'>>(new Map())
+  const [feedbackModal, setFeedbackModal] = useState<{ open: boolean; msgIndex: number; msg: Message | null }>({
+    open: false, msgIndex: -1, msg: null
+  })
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
 
   const streamingTextRef = useRef('')
   const streamingAgentRef = useRef<{ name: string; emoji: string } | null>(null)
@@ -243,6 +252,61 @@ export default function Playground() {
     setIsPromptAssistantOpen(true);
   }
 
+  // ── Feedback handlers ────────────────────────────────────────────────────────
+
+  const handlePositiveFeedback = async (index: number, msg: Message) => {
+    if (feedbackStates.has(index)) return  // já avaliado
+    const prevUserMsg = messages.slice(0, index).reverse().find(m => m.role === 'user')
+    const agentSlug = msg.agentSlug || selectedAgentSlug
+    if (!agentSlug) return
+
+    try {
+      await feedbackAPI.submit({
+        agent_slug: agentSlug,
+        user_message: prevUserMsg?.content || '',
+        ai_response: msg.content,
+        rating: 'positive',
+        model_used: msg.metadata?.supervisor?.model,
+        session_id: activeSession || undefined,
+      })
+      setFeedbackStates(prev => new Map(prev).set(index, 'positive'))
+    } catch (e) {
+      console.error('Erro ao salvar feedback positivo', e)
+    }
+  }
+
+  const handleNegativeFeedback = (index: number, msg: Message) => {
+    if (feedbackStates.has(index)) return  // já avaliado
+    setFeedbackModal({ open: true, msgIndex: index, msg })
+  }
+
+  const handleDislikeSubmit = async (correction: string) => {
+    const { msgIndex, msg } = feedbackModal
+    if (!msg) return
+    const prevUserMsg = messages.slice(0, msgIndex).reverse().find(m => m.role === 'user')
+    const agentSlug = msg.agentSlug || selectedAgentSlug
+    if (!agentSlug) return
+
+    setFeedbackLoading(true)
+    try {
+      await feedbackAPI.submit({
+        agent_slug: agentSlug,
+        user_message: prevUserMsg?.content || '',
+        ai_response: msg.content,
+        rating: 'negative',
+        correction,
+        model_used: msg.metadata?.supervisor?.model,
+        session_id: activeSession || undefined,
+      })
+      setFeedbackStates(prev => new Map(prev).set(msgIndex, 'negative'))
+      setFeedbackModal({ open: false, msgIndex: -1, msg: null })
+    } catch (e) {
+      console.error('Erro ao salvar feedback negativo', e)
+    } finally {
+      setFeedbackLoading(false)
+    }
+  }
+
   const currentAgent = selectedAgentSlug ? agents.find(a => a.slug === selectedAgentSlug) : null
 
   const layoutCols = selectedAgentSlug && showConfig ? '260px 1fr 320px' : '260px 1fr'
@@ -388,6 +452,7 @@ export default function Playground() {
                     {msg.role === 'assistant' && msg.agentName && (
                       <div className="msg-agent-name">{msg.agentName}</div>
                     )}
+                    {/* Message bubble */}
                     <div className={`msg-bubble ${msg.role}`}>
                       <div dangerouslySetInnerHTML={{
                         __html: msg.content
@@ -397,18 +462,54 @@ export default function Playground() {
                           .replace(/\n/g, '<br>')
                       }} />
                     </div>
-                    {msg.role === 'assistant' && (
-                      <div className="msg-actions">
-                        <button className="msg-action-btn" data-tooltip="Mencionar no Editor" onClick={() => handleMentionInEditor(i, msg)}>
-                          <Bot size={12} />
-                        </button>
-                        {msg.metadata && (
-                          <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(msg.metadata)}>
-                            <Activity size={12} />
+                    {msg.role === 'assistant' && (() => {
+                      const state = feedbackStates.get(i)
+                      return (
+                        <div className="msg-actions">
+                          {/* Esquerda: acoes de editor */}
+                          <button className="msg-action-btn" data-tooltip="Mencionar no Editor" onClick={() => handleMentionInEditor(i, msg)}>
+                            <Bot size={12} />
                           </button>
-                        )}
-                      </div>
-                    )}
+                          {msg.metadata && (
+                            <button className="msg-action-btn" data-tooltip="Ver Rastreamento" onClick={() => setSelectedTrace(msg.metadata)}>
+                              <Activity size={12} />
+                            </button>
+                          )}
+                          {/* Separador — empurra os botoes de feedback para a direita */}
+                          <div style={{ flex: 1 }} />
+                          {/* Direita: feedback */}
+                          <button
+                            className="msg-action-btn"
+                            data-tooltip="Boa resposta"
+                            onClick={() => handlePositiveFeedback(i, msg)}
+                            style={{
+                              borderRadius: '8px',
+                              background: state === 'positive' ? 'rgba(16,185,129,0.15)' : 'transparent',
+                              borderColor: state === 'positive' ? 'rgba(16,185,129,0.4)' : 'transparent',
+                              color: state === 'positive' ? 'var(--accent)' : 'var(--text-muted)',
+                              cursor: state ? 'default' : 'pointer',
+                            }}
+                          >
+                            <ThumbsUp size={12} />
+                          </button>
+                          <button
+                            className="msg-action-btn"
+                            data-tooltip="Resposta ruim — sugerir melhoria"
+                            onClick={() => handleNegativeFeedback(i, msg)}
+                            style={{
+                              borderRadius: '8px',
+                              background: state === 'negative' ? 'var(--error-dim)' : 'transparent',
+                              borderColor: state === 'negative' ? 'rgba(239,68,68,0.4)' : 'transparent',
+                              color: state === 'negative' ? 'var(--error)' : 'var(--text-muted)',
+                              cursor: state ? 'default' : 'pointer',
+                            }}
+                          >
+                            <ThumbsDown size={12} />
+                          </button>
+                        </div>
+                      )
+                    })()}
+
                   </div>
                 </div>
               ))}
@@ -798,6 +899,16 @@ Triagem inteligente com no máximo uma pergunta objetiva por vez.
       )}
 
       <TraceModal isOpen={selectedTrace !== null} onClose={() => setSelectedTrace(null)} trace={selectedTrace} />
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={feedbackModal.open}
+        onClose={() => setFeedbackModal({ open: false, msgIndex: -1, msg: null })}
+        onSubmit={handleDislikeSubmit}
+        aiResponse={feedbackModal.msg?.content || ''}
+        agentName={feedbackModal.msg?.agentName}
+        isLoading={feedbackLoading}
+      />
       
       <PromptAssistant 
         isOpen={isPromptAssistantOpen}

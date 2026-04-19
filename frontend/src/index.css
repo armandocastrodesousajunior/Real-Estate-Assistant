@@ -403,7 +403,7 @@ ul{list-style:none}
 .typing-dot-loading::before,.typing-dot-loading::after,.typing-dot-loading span{content:'';width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
 .typing-dot-loading::after{animation-delay:0.2s}
 .typing-dot-loading span{animation-delay:0.4s}
-.msg-actions{display:flex;gap:6px;margin-top:4px;padding:0 4px;opacity:0;transition:var(--transition)}
+.msg-actions{display:flex;align-items:center;gap:4px;width:100%;margin-top:4px;padding:0 4px;opacity:0;transition:var(--transition)}
 .msg-wrapper:hover .msg-actions{opacity:1}
 .msg-action-btn{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;color:var(--text-muted);cursor:pointer;transition:var(--transition);position:relative}
 .msg-action-btn:hover{background:var(--bg-elevated);border-color:var(--border);color:var(--text-primary)}

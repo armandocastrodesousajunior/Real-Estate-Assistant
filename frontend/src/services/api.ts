@@ -209,3 +209,28 @@ export const superAdminAPI = {
   updateUser: (id: number, data: any) => api.put(`/api/v1/superadmin/users/${id}`, data),
   deleteUser: (id: number) => api.delete(`/api/v1/superadmin/users/${id}`),
 }
+
+// ─── Feedback & Training ───────────────────────────────────────────────────────
+
+export const feedbackAPI = {
+  submit: (data: {
+    agent_slug: string
+    user_message: string
+    ai_response: string
+    rating: 'positive' | 'negative'
+    correction?: string
+    model_used?: string
+    session_id?: string
+  }) => api.post('/api/v1/feedback', data),
+
+  list: (agentSlug: string, params?: { rating?: string; page?: number; page_size?: number }) =>
+    api.get(`/api/v1/feedback/${agentSlug}`, { params }),
+
+  remove: (feedbackId: number) => api.delete(`/api/v1/feedback/${feedbackId}`),
+
+  train: (agentSlug: string) => api.post(`/api/v1/feedback/${agentSlug}/train`),
+
+  markProcessed: (agentSlug: string, feedbackIds: number[]) =>
+    api.post(`/api/v1/feedback/${agentSlug}/mark-processed`, { feedback_ids: feedbackIds }),
+}
+

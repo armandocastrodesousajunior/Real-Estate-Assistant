@@ -15,9 +15,10 @@ from app.models.agent import Agent                # noqa: F401
 from app.models.lead import Lead                  # noqa: F401
 from app.models.conversation import Conversation, Message  # noqa: F401
 from app.models.prompt import Prompt              # noqa: F401
+from app.models.feedback import MessageFeedback   # noqa: F401
 
 # Routers
-from app.routers import auth, properties, agents, prompts, chat, leads, logs, tools, workspaces, users, super_admin
+from app.routers import auth, properties, agents, prompts, chat, leads, logs, tools, workspaces, users, super_admin, feedback
 
 
 @asynccontextmanager
@@ -130,6 +131,7 @@ app.include_router(tools.router,      prefix="/api/v1/tools",      tags=["🛠�
 app.include_router(workspaces.router, prefix="/api/v1/workspaces", tags=["🏢 Workspaces"])
 app.include_router(users.router,      prefix="/api/v1/users",      tags=["👤 Usuários"])
 app.include_router(super_admin.router, prefix="/api/v1/superadmin", tags=["👑 Super Admin"])
+app.include_router(feedback.router,    prefix="/api/v1/feedback",    tags=["⭐ Feedback & Treinamento"])
 
 # ─── Root endpoints ───────────────────────────────────────────────────────────
 
