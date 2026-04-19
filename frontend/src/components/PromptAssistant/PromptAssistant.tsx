@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   X, Send, Bot, FileText, CheckCircle2, GitCompare,
   ChevronRight, Sparkles, RotateCcw, Info, Activity,
-  Zap, Wrench, Search
+  Zap, Wrench, Search, Users, Layers
 } from 'lucide-react';
 import { promptsAPI } from '../../services/api';
 import type { AgentSpec } from '../../types/agent';
@@ -1091,17 +1091,24 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                         >
                           <div style={{ 
                             width: '32px', height: '32px', borderRadius: '8px', 
-                            background: res.type === 'agent' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            background: res.slug.startsWith('all_') ? 'rgba(16, 185, 129, 0.1)' : (res.type === 'agent' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: res.type === 'agent' ? 'var(--primary)' : '#f59e0b'
+                            color: res.slug.startsWith('all_') ? 'var(--accent)' : (res.type === 'agent' ? 'var(--primary)' : '#f59e0b')
                           }}>
-                            {res.type === 'agent' ? <Bot size={16} /> : <Zap size={16} />}
+                            {res.slug === 'all_agents' ? <Users size={16} /> : 
+                             res.slug === 'all_tools' ? <Layers size={16} /> :
+                             res.type === 'agent' ? <Bot size={16} /> : <Zap size={16} />}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{res.name}</div>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {res.name}
+                              {res.slug.startsWith('all_') && <span style={{ marginLeft: '8px', fontSize: '0.6rem', padding: '2px 6px', background: 'var(--accent-dim)', color: 'var(--accent)', borderRadius: '4px', textTransform: 'uppercase' }}>Batch</span>}
+                            </div>
                             <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>@{res.slug}</div>
                           </div>
-                          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{res.type === 'agent' ? 'Agente' : 'Tool'}</div>
+                          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            {res.slug.startsWith('all_') ? 'Global' : (res.type === 'agent' ? 'Agente' : 'Tool')}
+                          </div>
                         </div>
                       ))}
                     </div>

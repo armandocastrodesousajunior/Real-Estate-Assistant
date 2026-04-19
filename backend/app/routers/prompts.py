@@ -140,6 +140,10 @@ async def list_assistant_resources(
     )
     resources = [{"slug": row[0], "name": row[1], "type": "agent"} for row in agents_res.all()]
     
+    # 1.1 Batch Mentions
+    resources.insert(0, {"slug": "all_agents", "name": "Mencionar: Todos os Agentes", "type": "agent"})
+    resources.insert(1, {"slug": "all_tools", "name": "Mencionar: Todas as Ferramentas", "type": "tool"})
+    
     # 2. Ferramentas Internas
     internal_tools = get_all_internal_tools()
     for t in internal_tools:
@@ -161,12 +165,37 @@ async def parse_and_inject_mentions(db: AsyncSession, workspace_id: int, text: s
     """
     import re
     mention_pattern = r"@([a-zA-Z0-9_\-]+)"
-    slugs = list(set(re.findall(mention_pattern, text)))
+    slugs = set(re.findall(mention_pattern, text))
     
+    # Expansão Especial: @all_agents
+    if "all_agents" in slugs:
+        slugs.remove("all_agents")
+        agents_res = await db.execute(
+            select(Agent.slug).where(Agent.workspace_id == workspace_id)
+        )
+        for row in agents_res.all():
+            slugs.add(row[0])
+            
+    # Expansão Especial: @all_tools
+    if "all_tools" in slugs:
+        slugs.remove("all_tools")
+        # Internas
+        for t in get_all_internal_tools():
+            slugs.add(t["slug"])
+        # Externas
+        ext_tools_res = await db.execute(
+            select(Tool.slug).where(Tool.workspace_id == workspace_id, Tool.is_active == True)
+        )
+        for row in ext_tools_res.all():
+            slugs.add(row[0])
+
     injected_blocks = []
     mention_metadata = []
     
-    for slug in slugs:
+    # Converter para lista ordenada por slug para consistência no Trace
+    sorted_slugs = sorted(list(slugs))
+    
+    for slug in sorted_slugs:
         # Tenta agente primeiro, depois ferramenta
         resource_data = await inspect_assistant_resource(db, workspace_id, "agent", slug)
         if isinstance(resource_data, str) and "não encontrado" in resource_data:
