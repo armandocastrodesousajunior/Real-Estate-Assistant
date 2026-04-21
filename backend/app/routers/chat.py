@@ -270,7 +270,7 @@ async def chat(
                 result = await openrouter.simple_complete(
                     system_prompt="Você é um assistente cirúrgico focado em dar títulos curtíssimos e minimalistas para conversas.",
                     user_message=title_prompt,
-                    model=settings.SUPERVISOR_MODEL,
+                    model=workspace.supervisor_model or settings.DEFAULT_SUPERVISOR_MODEL,
                     temperature=0.3,
                     max_tokens=20,
                     api_key=current_user.openrouter_key

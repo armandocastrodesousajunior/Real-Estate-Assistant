@@ -144,7 +144,7 @@ async def list_tools(
     workspace: Workspace = Depends(get_current_workspace)
 ):
     internal_tools = get_all_internal_tools()
-    result = await db.execute(select(Tool).where(Tool.workspace_id == workspace.id))
+    result = await db.execute(select(Tool).where(Tool.workspace_id == workspace.id, Tool.type == "external"))
     external_tools = result.scalars().all()
     return internal_tools + [ToolResponse.model_validate(t) for t in external_tools]
 
@@ -226,10 +226,25 @@ async def link_unlink_tool(
     )
     tool = tool_res.scalar_one_or_none()
     
-    # Se não for ferramenta externa, talvez seja interna? 
-    # Atualmente a UI só permite vincular ferramentas que "existem" no DB ou na lista interna.
+    # Se não encontrar a ferramenta, verifica se é uma ferramenta interna nativa para auto-persistir
     if not tool:
-         raise HTTPException(status_code=404, detail="Ferramenta externa não encontrada para vínculo por ID")
+        from app.core.tools_registry import get_tool_by_slug
+        internal = get_tool_by_slug(link.tool_slug)
+        if internal:
+            tool = Tool(
+                slug=internal["slug"],
+                name=internal["name"],
+                description=internal["description"],
+                prompt=internal["prompt"],
+                type="internal",
+                workspace_id=workspace.id,
+                is_active=True
+            )
+            db.add(tool)
+            await db.commit()
+            await db.refresh(tool)
+        else:
+            raise HTTPException(status_code=404, detail="Ferramenta não encontrada para vínculo por ID")
 
     if link.action == "link":
         q = select(agent_tools).where(
@@ -496,7 +511,7 @@ async def tool_sandbox(
                 "type": "sandbox_meta",
                 "tool_slug": tool_data["slug"],
                 "tool_name": tool_data["name"],
-                "model": settings.SUPERVISOR_MODEL,
+                "model": workspace.supervisor_model or settings.DEFAULT_SUPERVISOR_MODEL,
                 "injected_prompt_length": len(system_prompt),
                 "history_turns": len(req.history),
                 "system_prompt": system_prompt,
@@ -505,14 +520,18 @@ async def tool_sandbox(
 
             # Stream de tokens
             async for chunk in openrouter.chat_completion_stream(
-                model=settings.SUPERVISOR_MODEL,
+                model=workspace.supervisor_model or settings.DEFAULT_SUPERVISOR_MODEL,
                 messages=messages,
                 temperature=0.4,
                 max_tokens=2048,
                 api_key=current_user.openrouter_key
             ):
+                if isinstance(chunk, dict):
+                    if "usage" in chunk:
+                        token_count = chunk["usage"].get("total_tokens", token_count)
+                    continue
+                    
                 full_response.append(chunk)
-                token_count += 1
                 yield f'data: {json.dumps({"type": "token", "content": chunk})}\n\n'
 
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -524,7 +543,7 @@ async def tool_sandbox(
                 "elapsed_ms": elapsed_ms,
                 "approx_tokens": token_count * 3,  # estimativa
                 "response_length": len(response_text),
-                "model": settings.SUPERVISOR_MODEL,
+                "model": workspace.supervisor_model or settings.DEFAULT_SUPERVISOR_MODEL,
             }
             yield f"data: {json.dumps(done_event)}\n\n"
 
