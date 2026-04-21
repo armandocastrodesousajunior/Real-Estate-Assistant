@@ -156,15 +156,21 @@ async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspac
 
     lines = [
         "---",
-        "## 🎯 Referências de Comportamento (Feedback Humano)",
+        "## 🛑 DIRETRIZES ABSOLUTAS DE COMPORTAMENTO E PERSONALIDADE (MEMÓRIA VETORIAL)",
         "",
-        "Os exemplos abaixo foram rigorosamente avaliados por humanos. Use-os para calibrar suas respostas DENTRO deste contexto exato.",
+        "Abaixo estão feedbacks críticos que o seu criador (Supervisor Humano) avaliou em interações passadas. Você tem a OBRIGAÇÃO de usá-los como a **sua principal referência** de como se comportar e responder.",
+        "",
+        "**REGRAS ESTRITAS DE OBEDIÊNCIA:**",
+        "1. Se a pergunta atual for EXATAMENTE A MESMA que uma 'Pergunta do Humano' listada abaixo, responda EXATAMENTE do mesmo jeito e formato que a resposta corrigida/aprovada.",
+        "2. Se a pergunta for SEMELHANTE, você deve responder no mesmo sentido, ideia, tom de voz e perfil de comunicação da resposta validada.",
+        "3. Em todos os cenários aprovados, absorva a personalidade e o formato da resposta como SEU PERFIL DEFINITIVO.",
+        "4. Sob nenhuma hipótese cometa novamente os erros apontados nos cenários reprovados (❌).",
         "",
     ]
 
     # Seção positiva
     if positive:
-        lines.append("### ✅ Respostas que foram aprovadas — mantenha este padrão exato")
+        lines.append("### ✅ CÓPIAS DE SUCESSO — Este é o seu perfil de comunicação! Modele e copie!")
         lines.append("")
         for i, fb in enumerate(positive, 1):
             lines.append(f"**Exemplo {i}**")
@@ -175,7 +181,7 @@ async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspac
 
     # Seção negativa
     if negative:
-        lines.append("### ❌ Situações onde você ERROU — corrija seguindo estritamente as instruções abaixo")
+        lines.append("### ❌ FALHAS FATAIS PROIBIDAS — Nunca repita os erros abaixo")
         lines.append("")
         for i, fb in enumerate(negative, 1):
             lines.append(f"**Exemplo {i}**")
