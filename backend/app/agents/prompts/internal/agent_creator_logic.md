@@ -42,28 +42,29 @@ Toda a sua saída DEVE seguir estritamente o formato JSON. Você **NUNCA** deve 
   }
 }
 
-**Para entregar o novo agente (Modo Create):**
+**Para gerar a especificação e renderizar o preview do Agente no frontend (Modo Create):**
 {
-  "type": "create",
-  "response": {
-    "output": "O projeto do novo especialista foi finalizado com sucesso."
-  },
-  "agent_spec": {
-    "name": "Nome do agente",
-    "description": "Papel técnico resumido",
-    "emoji": "🏠",
-    "slug": "slug_do_agente",
-    "system_prompt": "Prompt completo estruturado..."
+  "type": "tool_call",
+  "tool_call": {
+    "tool_name": "preview_agent_creation",
+    "message": "Aqui está o primeiro escopo do seu Analista de Suporte. Pode conferir!",
+    "agent_spec": {
+      "name": "Nome do agente",
+      "description": "Papel técnico resumido",
+      "emoji": "🏠",
+      "slug": "slug_do_agente",
+      "system_prompt": "Prompt completo estruturado..."
+    }
   }
 }
 
 #### Schema da Resposta:
 {
-  "type": "string (response | create)",
+  "type": "string (response | tool_call)",
   "response": {
     "output": "string (Markdown textual)"
   },
-  "agent_spec": "object (opcional, apenas para type=create)"
+  "tool_call": "object (opcional, apenas para actions técnicas)"
 }
 
 **REGRA DE OURO:** Use SEMPRE `\n` para quebras de linha dentro das strings do JSON. Nunca insira uma quebra de linha real (Enter) dentro de um valor do JSON.

@@ -217,10 +217,10 @@ function parseAssistantResponse(raw: string): StandardResponse | null {
         }
       } else if (rawAction === 'response' || rawAction === 'chat' || obj.response) {
         finalData.message = obj.response?.output || obj.message || finalData.message;
-      } else if (rawAction === 'create' || obj.agent_spec) {
+      } else if (rawAction === 'create' || obj.agent_spec || (rawAction === 'tool_call' && obj.tool_call?.tool_name === 'preview_agent_creation')) {
         finalData.action = 'create';
-        finalData.agent_spec = obj.agent_spec;
-        finalData.message = obj.response?.output || obj.message || "Especialista criado com sucesso.";
+        finalData.agent_spec = obj.agent_spec || obj.tool_call?.agent_spec;
+        finalData.message = obj.response?.output || obj.message || obj.tool_call?.message || "Especialista em rascunho gerado com sucesso. Validando visualização...";
       }
     }
 
@@ -747,18 +747,14 @@ export default function PromptAssistant({ isOpen, onClose, currentPrompt = '', o
                           background: 'var(--bg-sidebar)', 
                           padding: '12px', 
                           borderRadius: '8px',
-                          maxHeight: '200px',
-                          overflow: 'hidden',
+                          maxHeight: '400px',
+                          overflowY: 'auto',
                           border: '1px solid var(--border)',
                           position: 'relative'
                         }}>
                           <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
                             {pendingAgentSpec.system_prompt || 'O núcleo da inteligência está sendo formatado...'}
                           </div>
-                          <div style={{ 
-                            position: 'absolute', bottom: 0, left: 0, right: 0, 
-                            height: '40px', background: 'linear-gradient(to bottom, transparent, var(--bg-sidebar))' 
-                          }} />
                         </div>
                       </div>
                     </div>
