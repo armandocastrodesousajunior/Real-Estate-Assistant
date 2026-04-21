@@ -25,7 +25,11 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_SITE_URL: str = "http://localhost:5173"
     OPENROUTER_SITE_NAME: str = "Real-Estate-Assistant"
+    OPENROUTER_EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
     
+    # --- RLHF & Feedback ---
+    DEFAULT_FEEDBACK_LIMIT: int = 15
+
     # Internal Agents Defaults
     DEFAULT_SUPERVISOR_MODEL: str = "openai/gpt-4o-mini"
     DEFAULT_SUPERVISOR_TEMPERATURE: float = 0.1

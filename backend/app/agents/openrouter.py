@@ -164,6 +164,29 @@ class OpenRouterClient:
             data = response.json()
             return data.get("data", [])
 
+    async def get_embeddings(self, input_text: str, model: Optional[str] = None, api_key: Optional[str] = None) -> List[float]:
+        """Gera embeddings para o texto usando OpenRouter"""
+        model = model or settings.OPENROUTER_EMBEDDING_MODEL
+        payload = {
+            "model": model,
+            "input": input_text,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(
+                    f"{self.BASE_URL}/embeddings",
+                    headers=self._get_headers(api_key),
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+                if "data" in data and len(data["data"]) > 0:
+                    return data["data"][0].get("embedding", [])
+                return []
+            except Exception as e:
+                logger.error(f"Erro ao gerar embeddings via OpenRouter: {e}")
+                return []
+
     async def simple_complete(
         self,
         system_prompt: str,

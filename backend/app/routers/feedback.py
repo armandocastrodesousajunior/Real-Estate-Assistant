@@ -38,9 +38,18 @@ async def submit_feedback(
     data: FeedbackCreate,
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(get_current_workspace),
+    current_user: User = Depends(get_current_user),
 ):
     if data.rating not in ("positive", "negative"):
         raise HTTPException(status_code=422, detail="rating deve ser 'positive' ou 'negative'")
+
+    # Gerar a string de contexto para o RAG Vetorial
+    knowledge_text = f"User: {data.user_message}\nAI: {data.ai_response}"
+    if data.correction:
+        knowledge_text += f"\nCorrection: {data.correction}"
+    
+    vector = await openrouter.get_embeddings(knowledge_text, api_key=current_user.openrouter_key)
+    embedding_str = json.dumps(vector) if vector else None
 
     fb = MessageFeedback(
         workspace_id=workspace.id,
@@ -51,6 +60,7 @@ async def submit_feedback(
         correction=data.correction,
         model_used=data.model_used,
         session_id=data.session_id,
+        embedding=embedding_str
     )
     db.add(fb)
     await db.commit()

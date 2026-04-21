@@ -22,9 +22,10 @@ class MessageFeedback(Base):
     rating       = Column(String(10), nullable=False)   # "positive" | "negative"
     correction   = Column(Text, nullable=True)          # Apenas nos negativos: como deveria ter respondido
 
-    # Metadados de rastreamento
+    # Metadados de rastreamento e banco vetorial
     model_used   = Column(String(100), nullable=True)
     session_id   = Column(String(100), nullable=True)
+    embedding    = Column(Text, nullable=True)          # Armazena o JSON numérico [0.123, -0.045...]
 
     # Status de processamento no ciclo de treinamento
     is_processed = Column(Boolean, default=False, nullable=False)

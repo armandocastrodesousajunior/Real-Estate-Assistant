@@ -18,6 +18,7 @@ class AgentResponse(BaseModel):
     presence_penalty: float
     is_active: bool
     is_system: bool
+    feedback_limit: int
     total_calls: int
     total_tokens_used: int
     avg_response_time_ms: float
@@ -45,6 +46,7 @@ class AgentUpdate(BaseModel):
     frequency_penalty: Optional[float] = Field(None, ge=-2.0, le=2.0)
     presence_penalty: Optional[float] = Field(None, ge=-2.0, le=2.0)
     is_active: Optional[bool] = None
+    feedback_limit: Optional[int] = Field(None, ge=0, le=50, description="Limite de exemplos passados de feedback humano no prompt.")
     description: Optional[str] = None
 
 

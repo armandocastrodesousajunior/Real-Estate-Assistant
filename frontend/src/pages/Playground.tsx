@@ -13,7 +13,7 @@ import type { AgentSpec } from '../types/agent'
 
 interface Message { role: string; content: string; agentSlug?: string; agentName?: string; agentEmoji?: string; metadata?: any }
 interface Conversation { id: number; session_id: string; title?: string; message_count: number; updated_at: string }
-interface Agent { slug: string; name: string; emoji: string; color: string; description: string; model: string; temperature: number; max_tokens: number; is_active: boolean; is_system: boolean }
+interface Agent { slug: string; name: string; emoji: string; color: string; description: string; model: string; temperature: number; max_tokens: number; is_active: boolean; is_system: boolean; feedback_limit: number }
 
 
 
@@ -31,7 +31,7 @@ export default function Playground() {
   const [showConfig, setShowConfig] = useState(false)
   const [selectedTrace, setSelectedTrace] = useState<any>(null)
   const [editedPrompt, setEditedPrompt] = useState('')
-  const [editedParams, setEditedParams] = useState({ model: '', temperature: 0.7, max_tokens: 2048 })
+  const [editedParams, setEditedParams] = useState({ model: '', temperature: 0.7, max_tokens: 2048, feedback_limit: 15 })
   const [promptHistory, setPromptHistory] = useState<any[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -92,7 +92,7 @@ export default function Playground() {
           for (const fb of fbData) {
             // Encontra o indice da mensagem da IA que corresponde a este feedback
             const idx = loadedMessages.findIndex(
-              (m: any, i: number) => m.role === 'assistant' && m.content === fb.ai_response
+              (m: any, i: number) => m.role === 'assistant' && (m.content?.trim() === fb.ai_response?.trim())
                 && loadedMessages.slice(0, i).reverse().some((prev: any) => prev.role === 'user')
             )
             if (idx !== -1) {
@@ -176,13 +176,13 @@ export default function Playground() {
 
   useEffect(() => {
     if (selectedAgentSlug) loadAgentConfig(selectedAgentSlug)
-    else { setEditedPrompt(''); setEditedParams({ model: '', temperature: 0.7, max_tokens: 2048 }); setHasUnsavedChanges(false) }
+    else { setEditedPrompt(''); setEditedParams({ model: '', temperature: 0.7, max_tokens: 2048, feedback_limit: 15 }); setHasUnsavedChanges(false) }
   }, [selectedAgentSlug])
 
   const loadAgentConfig = async (slug: string) => {
     const [agentRes, promptRes, historyRes] = await Promise.all([agentsAPI.get(slug), promptsAPI.get(slug), promptsAPI.history(slug)])
     setEditedPrompt(promptRes.data.system_prompt)
-    setEditedParams({ model: agentRes.data.model, temperature: agentRes.data.temperature, max_tokens: agentRes.data.max_tokens })
+    setEditedParams({ model: agentRes.data.model, temperature: agentRes.data.temperature, max_tokens: agentRes.data.max_tokens, feedback_limit: agentRes.data.feedback_limit ?? 15 })
     setPromptHistory(historyRes.data)
     setHasUnsavedChanges(false)
     try {
@@ -709,6 +709,17 @@ export default function Playground() {
                 <span className="value-badge">{editedParams.max_tokens}</span>
               </div>
               <input type="range" min="256" max="8192" step="256" value={editedParams.max_tokens} onChange={(e) => { setEditedParams({ ...editedParams, max_tokens: Number(e.target.value) }); setHasUnsavedChanges(true) }} />
+            </div>
+
+            <div className="config-section">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div className="config-label" style={{ marginBottom: 0 }}>Feedback Limit (RLHF)</div>
+                <span className="value-badge">{editedParams.feedback_limit}</span>
+              </div>
+              <input type="range" min="0" max="50" step="1" value={editedParams.feedback_limit} onChange={(e) => { setEditedParams({ ...editedParams, feedback_limit: Number(e.target.value) }); setHasUnsavedChanges(true) }} />
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.4 }}>
+                Quantidade de exemplos passados de feedback humano que serão injetados no contexto deste agente.
+              </div>
             </div>
 
             <div className="config-section">

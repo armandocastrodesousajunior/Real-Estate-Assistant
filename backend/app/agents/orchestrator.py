@@ -97,21 +97,23 @@ def get_internal_prompt(filename: str) -> str:
         logger.error(f"Error loading internal prompt {filename}: {e}")
         return ""
 
+async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspace_id: int, user_message: str, limit: int = 15, api_key: Optional[str] = None) -> str:
+    """Busca feedbacks positivos e negativos ordenando por relevância via RAG Vetorial."""
+    
+    # 1. Gera o vetor da mensagem atual do usuário
+    user_vector = await openrouter.get_embeddings(user_message, api_key=api_key) if user_message else None
 
-async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspace_id: int, limit: int = 15) -> str:
-    """Busca feedbacks positivos e negativos e os formata como exemplos de comportamento."""
-
-    # Feedbacks positivos (respostas aprovadas — continue assim)
+    # 2. Busca TODOS os feedbacks positivos
     pos_result = await db.execute(
         select(MessageFeedback).where(
             MessageFeedback.workspace_id == workspace_id,
             MessageFeedback.agent_slug == agent_slug,
             MessageFeedback.rating == "positive",
-        ).order_by(MessageFeedback.created_at.desc()).limit(limit)
+        )
     )
-    positive = pos_result.scalars().all()
+    all_positive = pos_result.scalars().all()
 
-    # Feedbacks negativos com correção (respostas que precisam de ajuste)
+    # 3. Busca TODOS os feedbacks negativos com correção
     neg_result = await db.execute(
         select(MessageFeedback).where(
             MessageFeedback.workspace_id == workspace_id,
@@ -119,9 +121,35 @@ async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspac
             MessageFeedback.rating == "negative",
             MessageFeedback.correction != None,
             MessageFeedback.correction != "",
-        ).order_by(MessageFeedback.created_at.desc()).limit(limit)
+        )
     )
-    negative = neg_result.scalars().all()
+    all_negative = neg_result.scalars().all()
+
+    # Se não houver nada, retorna vazio sem fazer os cálculos caros
+    if not all_positive and not all_negative:
+        return ""
+
+    # 4. Rankeamento via Cosine Similarity
+    from app.core.vectors import cosine_similarity
+    import json
+
+    def rank_feedbacks(feedbacks):
+        ranked = []
+        for fb in feedbacks:
+            sim = 0.0
+            if user_vector and fb.embedding:
+                try:
+                    fb_vec = json.loads(fb.embedding)
+                    sim = cosine_similarity(user_vector, fb_vec)
+                except Exception as e:
+                    logger.warning(f"Failed to load embedding JSON for fb ID {fb.id}: {e}")
+            ranked.append((sim, fb))
+        # Sort desc by sim, then by timestamp fallback
+        ranked.sort(key=lambda x: (x[0], x[1].created_at.timestamp() if x[1].created_at else 0), reverse=True)
+        return [f for _, f in ranked[:limit]]
+
+    positive = rank_feedbacks(all_positive)
+    negative = rank_feedbacks(all_negative)
 
     if not positive and not negative:
         return ""
@@ -130,30 +158,30 @@ async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspac
         "---",
         "## 🎯 Referências de Comportamento (Feedback Humano)",
         "",
-        "Os exemplos abaixo foram avaliados por um humano. Use-os para calibrar suas respostas nesta conversa.",
+        "Os exemplos abaixo foram rigorosamente avaliados por humanos. Use-os para calibrar suas respostas DENTRO deste contexto exato.",
         "",
     ]
 
     # Seção positiva
     if positive:
-        lines.append("### ✅ Respostas que foram aprovadas — mantenha este padrão")
+        lines.append("### ✅ Respostas que foram aprovadas — mantenha este padrão exato")
         lines.append("")
         for i, fb in enumerate(positive, 1):
             lines.append(f"**Exemplo {i}**")
             if fb.user_message:
-                lines.append(f"- Pergunta: {fb.user_message}")
-            lines.append(f"- Resposta aprovada: {fb.ai_response}")
+                lines.append(f"- Pergunta do Humano: {fb.user_message}")
+            lines.append(f"- Resposta Aprovada: {fb.ai_response}")
             lines.append("")
 
     # Seção negativa
     if negative:
-        lines.append("### ❌ Situações onde você errou — corrija este padrão")
+        lines.append("### ❌ Situações onde você ERROU — corrija seguindo estritamente as instruções abaixo")
         lines.append("")
         for i, fb in enumerate(negative, 1):
             lines.append(f"**Exemplo {i}**")
             if fb.user_message:
-                lines.append(f"- Pergunta: {fb.user_message}")
-            lines.append(f"- Sua resposta (INCORRETA): {fb.ai_response}")
+                lines.append(f"- Pergunta do Humano: {fb.user_message}")
+            lines.append(f"- A Sua Resposta (INCORRETA): {fb.ai_response}")
             lines.append(f"- Como deveria ter respondido: {fb.correction}")
             lines.append("")
 
@@ -482,7 +510,8 @@ async def run_agent_stream(
     full_system = f"{system_prompt}\n\n{internal_logic}"
 
     # Injeta feedbacks negativos como exemplos de comportamento correto (in-context learning)
-    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id)
+    feedback_limit = agent.feedback_limit if hasattr(agent, 'feedback_limit') and agent.feedback_limit is not None else 15
+    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id, user_message=user_message, limit=feedback_limit, api_key=api_key)
     if feedback_context:
         full_system += f"\n\n{feedback_context}"
 
@@ -716,7 +745,8 @@ async def run_agent_complete(
     full_system = f"{system_prompt}\n\n{internal_logic}"
 
     # Injeta feedbacks negativos como exemplos de comportamento correto (in-context learning)
-    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id)
+    feedback_limit = agent.feedback_limit if hasattr(agent, 'feedback_limit') and agent.feedback_limit is not None else 15
+    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id, user_message=user_message, limit=feedback_limit, api_key=api_key)
     if feedback_context:
         full_system += f"\n\n{feedback_context}"
 

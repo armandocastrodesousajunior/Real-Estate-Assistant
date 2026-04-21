@@ -29,6 +29,7 @@ class Agent(Base):
     # Controle
     is_active = Column(Boolean, default=True)
     is_system = Column(Boolean, default=True)  # Agentes do sistema não podem ser deletados
+    feedback_limit = Column(Integer, default=15) # Quantidade de exemplos RLHF no contexto
 
     # Estatísticas
     total_calls = Column(Integer, default=0)
