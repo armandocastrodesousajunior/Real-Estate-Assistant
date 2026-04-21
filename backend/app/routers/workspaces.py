@@ -21,6 +21,7 @@ class WorkspaceResponse(BaseModel):
     name: str
     slug: str
     owner_id: int
+    embedding_model: Optional[str] = None
     supervisor_model: Optional[str] = None
     supervisor_temperature: Optional[float] = None
     prompt_assistant_model: Optional[str] = None
@@ -112,6 +113,7 @@ async def get_workspace_detail(
 
 class WorkspaceUpdate(BaseModel):
     name: Optional[str] = None
+    embedding_model: Optional[str] = None
     supervisor_model: Optional[str] = None
     supervisor_temperature: Optional[float] = None
     prompt_assistant_model: Optional[str] = None
@@ -138,6 +140,7 @@ async def update_workspace(
         workspace.name = data.name
         workspace.slug = data.name.lower().replace(" ", "-")
         
+    if data.embedding_model is not None: workspace.embedding_model = data.embedding_model
     if data.supervisor_model is not None: workspace.supervisor_model = data.supervisor_model
     if data.supervisor_temperature is not None: workspace.supervisor_temperature = data.supervisor_temperature
     if data.prompt_assistant_model is not None: workspace.prompt_assistant_model = data.prompt_assistant_model

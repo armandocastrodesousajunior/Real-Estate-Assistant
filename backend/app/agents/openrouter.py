@@ -166,7 +166,7 @@ class OpenRouterClient:
 
     async def get_embeddings(self, input_text: str, model: Optional[str] = None, api_key: Optional[str] = None) -> List[float]:
         """Gera embeddings para o texto usando OpenRouter"""
-        model = model or settings.OPENROUTER_EMBEDDING_MODEL
+        model = model or settings.DEFAULT_EMBEDDING_MODEL
         payload = {
             "model": model,
             "input": input_text,

@@ -29,6 +29,7 @@ class Workspace(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Internal AI Configuration (Overrides .env defaults)
+    embedding_model = Column(String(100), nullable=True)
     supervisor_model = Column(String(100), nullable=True)
     supervisor_temperature = Column(Float, nullable=True)
     

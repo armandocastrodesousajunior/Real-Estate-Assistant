@@ -15,6 +15,7 @@ export default function WorkspaceSettings() {
   const [aiSuccess, setAiSuccess] = useState(false)
 
   const [aiConfig, setAiConfig] = useState({
+    embedding_model: '',
     supervisor_model: '',
     supervisor_temperature: 0.1,
     prompt_assistant_model: '',
@@ -42,6 +43,7 @@ export default function WorkspaceSettings() {
         // Load details for AI config
         const { data: detail } = await workspacesAPI.getDetail(currentWsId)
         setAiConfig({
+          embedding_model: detail.embedding_model || '',
           supervisor_model: detail.supervisor_model || '',
           supervisor_temperature: detail.supervisor_temperature ?? 0.1,
           prompt_assistant_model: detail.prompt_assistant_model || '',
@@ -63,6 +65,7 @@ export default function WorkspaceSettings() {
     setAiSuccess(false)
     try {
       const data = {
+        embedding_model: aiConfig.embedding_model || null,
         supervisor_model: aiConfig.supervisor_model || null,
         supervisor_temperature: aiConfig.supervisor_temperature,
         prompt_assistant_model: aiConfig.prompt_assistant_model || null,
@@ -87,6 +90,13 @@ export default function WorkspaceSettings() {
     { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
     { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro' },
     { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B' },
+  ]
+
+  const EMBEDDING_MODELS = [
+    { id: '', name: 'Padrão do Sistema (3-Small)' },
+    { id: 'openai/text-embedding-3-small', name: 'OpenAI 3 Small (1536d)' },
+    { id: 'openai/text-embedding-3-large', name: 'OpenAI 3 Large (3072d)' },
+    { id: 'nomic-ai/nomic-embed-text-v1.5', name: 'Nomic Embed Text v1.5' },
   ]
 
   const currentWorkspace = workspaces.find(w => w.id === currentWsId)
@@ -290,6 +300,54 @@ export default function WorkspaceSettings() {
                         <div className="flex justify-between text-[10px] text-muted mt-1 px-1">
                           <span>Preciso</span>
                           <span>Criativo</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Relatórios e Memória (Embeddings) */}
+                <div className="card premium-card-gradient" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+                  <div style={{ padding: '24px' }}>
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-info-dim text-info flex items-center justify-center" style={{ boxWeight: 'bold', boxShadow: '0 0 20px rgba(59, 130, 246, 0.1)' }}>
+                          <Sliders size={24} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-base">Motor Vetorial</h4>
+                            <div 
+                              className="has-tooltip text-muted hover:text-info transition-colors"
+                              data-explanation="Gera os embeddings vetoriais usados para calcular similaridade nas buscas de memórias passadas e diretrizes de RLHF."
+                            >
+                              <Info size={14} />
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-muted">Similaridade Semântica</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="form-group">
+                        <label className="form-label text-[10px] uppercase tracking-wider">Modelo de Embeddings</label>
+                        <select 
+                          className="form-select"
+                          style={{ height: '42px', fontSize: '0.85rem' }}
+                          value={aiConfig.embedding_model}
+                          onChange={e => setAiConfig({...aiConfig, embedding_model: e.target.value})}
+                        >
+                          {EMBEDDING_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </div>
+                      
+                      <div className="form-group">
+                        <div className="flex items-start gap-2 p-3 mt-4 bg-red-500/5 border border-red-500/20 rounded-lg">
+                          <AlertCircle size={24} className="text-red-400 mt-1 flex-shrink-0" />
+                          <p className="text-[10px] text-red-400 leading-tight">
+                            <strong>Atenção:</strong> Mudar este mecanismo para um modelo de dimensionamento diferente (Ex: migrar de 1536d para 3072d) quebrará a calculadora semântica e os feedbacks na API até as memórias serem recriadas.
+                          </p>
                         </div>
                       </div>
                     </div>

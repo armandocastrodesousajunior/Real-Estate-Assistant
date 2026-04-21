@@ -97,11 +97,12 @@ def get_internal_prompt(filename: str) -> str:
         logger.error(f"Error loading internal prompt {filename}: {e}")
         return ""
 
-async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspace_id: int, user_message: str, limit: int = 15, api_key: Optional[str] = None) -> str:
+async def get_agent_feedback_context(db: AsyncSession, agent_slug: str, workspace_id: int, user_message: str, limit: int = 15, api_key: Optional[str] = None, workspace: Optional[Workspace] = None) -> str:
     """Busca feedbacks positivos e negativos ordenando por relevância via RAG Vetorial."""
     
     # 1. Gera o vetor da mensagem atual do usuário
-    user_vector = await openrouter.get_embeddings(user_message, api_key=api_key) if user_message else None
+    model = workspace.embedding_model if (workspace and workspace.embedding_model) else settings.DEFAULT_EMBEDDING_MODEL
+    user_vector = await openrouter.get_embeddings(user_message, model=model, api_key=api_key) if user_message else None
 
     # 2. Busca TODOS os feedbacks positivos
     pos_result = await db.execute(
@@ -517,7 +518,7 @@ async def run_agent_stream(
 
     # Injeta feedbacks negativos como exemplos de comportamento correto (in-context learning)
     feedback_limit = agent.feedback_limit if hasattr(agent, 'feedback_limit') and agent.feedback_limit is not None else 15
-    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id, user_message=user_message, limit=feedback_limit, api_key=api_key)
+    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id, user_message=user_message, limit=feedback_limit, api_key=api_key, workspace=workspace)
     if feedback_context:
         full_system += f"\n\n{feedback_context}"
 
@@ -752,7 +753,7 @@ async def run_agent_complete(
 
     # Injeta feedbacks negativos como exemplos de comportamento correto (in-context learning)
     feedback_limit = agent.feedback_limit if hasattr(agent, 'feedback_limit') and agent.feedback_limit is not None else 15
-    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id, user_message=user_message, limit=feedback_limit, api_key=api_key)
+    feedback_context = await get_agent_feedback_context(db, agent_slug, workspace_id, user_message=user_message, limit=feedback_limit, api_key=api_key, workspace=workspace)
     if feedback_context:
         full_system += f"\n\n{feedback_context}"
 

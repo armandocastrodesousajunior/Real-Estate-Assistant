@@ -48,7 +48,11 @@ async def submit_feedback(
     if data.correction:
         knowledge_text += f"\nCorrection: {data.correction}"
     
-    vector = await openrouter.get_embeddings(knowledge_text, api_key=current_user.openrouter_key)
+    vector = await openrouter.get_embeddings(
+        knowledge_text, 
+        model=workspace.embedding_model or settings.DEFAULT_EMBEDDING_MODEL,
+        api_key=current_user.openrouter_key
+    )
     embedding_str = json.dumps(vector) if vector else None
 
     fb = MessageFeedback(
