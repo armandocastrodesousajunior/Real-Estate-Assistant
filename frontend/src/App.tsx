@@ -13,6 +13,7 @@ import ToolsPage from './pages/ToolsPage'
 import Settings from './pages/Settings'
 import WorkspaceSettings from './pages/WorkspaceSettings'
 import TokenSettings from './pages/TokenSettings'
+import Conversations from './pages/Conversations'
 import SuperAdmin from './pages/SuperAdmin'
 import SettingsLayout from './components/Layout/SettingsLayout'
 
@@ -50,6 +51,7 @@ function App() {
           <Route path="playground/agents" element={<Playground />} />
           <Route path="playground/tools" element={<ToolsPage />} />
           <Route path="leads" element={<Leads />} />
+          <Route path="conversations" element={<Conversations />} />
           <Route path="logs" element={<Logs />} />
         </Route>
 

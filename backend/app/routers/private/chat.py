@@ -322,7 +322,36 @@ async def list_conversations(
     query = query.order_by(Conversation.updated_at.desc()).offset(offset).limit(page_size)
     
     result = await db.execute(query)
-    return [ConversationResponse.model_validate(c) for c in result.scalars().all()]
+    conversations = result.scalars().all()
+
+    # Para cada conversa, busca a última mensagem
+    enriched = []
+    for conv in conversations:
+        last_msg_result = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conv.id)
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        last_msg = last_msg_result.scalar_one_or_none()
+
+        enriched.append(ConversationResponse(
+            id=conv.id,
+            session_id=conv.session_id,
+            title=conv.title,
+            last_agent_slug=conv.last_agent_slug,
+            last_agent_name=last_msg.agent_name if last_msg and last_msg.agent_name else None,
+            last_agent_emoji=last_msg.agent_emoji if last_msg and last_msg.agent_emoji else None,
+            last_message_preview=last_msg.content[:120] if last_msg else None,
+            last_message_role=last_msg.role.value if last_msg else None,
+            message_count=conv.message_count,
+            total_tokens=conv.total_tokens,
+            is_test=conv.is_test,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
+        ))
+
+    return enriched
 
 
 @router.get(

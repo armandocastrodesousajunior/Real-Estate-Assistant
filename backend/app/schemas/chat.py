@@ -48,6 +48,10 @@ class ConversationResponse(BaseModel):
     session_id: str
     title: Optional[str] = None
     last_agent_slug: Optional[str] = None
+    last_agent_name: Optional[str] = None
+    last_agent_emoji: Optional[str] = None
+    last_message_preview: Optional[str] = None
+    last_message_role: Optional[str] = None
     message_count: int
     total_tokens: int
     is_test: bool = False

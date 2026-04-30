@@ -3,7 +3,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, Building2, Bot, Users, LogOut, Activity, Home,
   ChevronDown, ChevronUp, Wrench, Settings, Building, SwitchCamera,
-  MoreVertical
+  MoreVertical, MessageCircle
 } from 'lucide-react'
 import { workspacesAPI, usersAPI } from '../../services/api'
 import { useEffect } from 'react'
@@ -12,6 +12,7 @@ import WorkspaceManagerModal from './WorkspaceManagerModal'
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/properties', icon: Building2, label: 'Imóveis' },
+  { to: '/conversations', icon: MessageCircle, label: 'Conversas' },
   { to: '/leads', icon: Users, label: 'Leads' },
   {
     to: '/playground',
