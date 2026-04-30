@@ -34,7 +34,7 @@ async def list_leads(
         from sqlalchemy import or_
         query = query.where(
             or_(
-                Lead.name.ilike(f"%{q}%"),
+                Lead.full_name.ilike(f"%{q}%"),
                 Lead.email.ilike(f"%{q}%"),
                 Lead.phone.ilike(f"%{q}%"),
             )

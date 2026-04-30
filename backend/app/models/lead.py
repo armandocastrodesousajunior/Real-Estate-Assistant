@@ -6,13 +6,13 @@ from app.core.database import Base
 
 
 class LeadStatus(str, enum.Enum):
-    NEW = "novo"
-    CONTACTED = "contatado"
-    QUALIFIED = "qualificado"
-    PROPOSAL = "proposta"
-    NEGOTIATING = "negociando"
-    CLOSED_WON = "fechado_ganho"
-    CLOSED_LOST = "fechado_perdido"
+    NEW = "new"
+    CONTACTED = "contacted"
+    QUALIFIED = "qualified"
+    PROPOSAL = "proposal"
+    NEGOTIATING = "negotiating"
+    CLOSED = "closed"
+    LOST = "lost"
 
 
 class LeadSource(str, enum.Enum):
@@ -30,25 +30,19 @@ class Lead(Base):
     __tablename__ = "leads"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False, index=True)
+    full_name = Column(String(200), nullable=False, index=True)
+    phone = Column(String(50), nullable=True)
     email = Column(String(200), nullable=True, index=True)
-    phone = Column(String(20), nullable=True)
+    
+    country = Column(String(100), nullable=True)
+    state = Column(String(100), nullable=True)
+    city = Column(String(150), nullable=True)
+    document = Column(String(50), nullable=True)
 
     status = Column(SAEnum(LeadStatus), default=LeadStatus.NEW)
     source = Column(SAEnum(LeadSource), default=LeadSource.CHAT_AI)
 
-    # Preferências de busca
     notes = Column(Text, nullable=True)
-    desired_type = Column(String(50), nullable=True)   # tipo de imóvel desejado
-    desired_city = Column(String(100), nullable=True)
-    desired_neighborhood = Column(String(100), nullable=True)
-    min_price = Column(Integer, nullable=True)
-    max_price = Column(Integer, nullable=True)
-    min_bedrooms = Column(Integer, nullable=True)
-
-    # Relacionamento com imóvel de interesse
-    property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
-    property = relationship("Property", back_populates="leads")
 
     # Referência à conversa (só o ID — sem relationship para evitar dependência circular)
     conversation_id = Column(Integer, nullable=True)

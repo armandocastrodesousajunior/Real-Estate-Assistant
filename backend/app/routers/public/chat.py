@@ -50,7 +50,7 @@ async def get_or_create_public_conversation(db: AsyncSession, session_id: Option
 
     # Cria o Lead vinculado a esta nova conversa
     new_lead = Lead(
-        name="Lead Anônimo (API)",
+        full_name="Lead Anônimo (API)",
         status=LeadStatus.NEW,
         source=LeadSource.CHAT_AI,
         conversation_id=conv.id,

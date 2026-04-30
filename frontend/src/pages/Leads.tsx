@@ -3,13 +3,13 @@ import { Search, Plus, Edit, Trash2, Users } from 'lucide-react'
 import { leadsAPI } from '../services/api'
 
 const STATUS_OPTIONS = [
-  { value: 'novo', label: 'Novo', badge: 'badge-info' },
-  { value: 'contatado', label: 'Contatado', badge: 'badge-muted' },
-  { value: 'qualificado', label: 'Qualificado', badge: 'badge-success' },
-  { value: 'proposta', label: 'Proposta', badge: 'badge-warning' },
-  { value: 'negociando', label: 'Negociando', badge: 'badge-primary' },
-  { value: 'fechado_ganho', label: 'Fechado ✓', badge: 'badge-success' },
-  { value: 'fechado_perdido', label: 'Perdido', badge: 'badge-error' },
+  { value: 'new', label: 'Novo', badge: 'badge-info' },
+  { value: 'contacted', label: 'Contatado', badge: 'badge-muted' },
+  { value: 'qualified', label: 'Qualificado', badge: 'badge-success' },
+  { value: 'proposal', label: 'Proposta', badge: 'badge-warning' },
+  { value: 'negotiating', label: 'Negociando', badge: 'badge-primary' },
+  { value: 'closed', label: 'Fechado ✓', badge: 'badge-success' },
+  { value: 'lost', label: 'Perdido', badge: 'badge-error' },
 ]
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -18,7 +18,10 @@ const SOURCE_LABEL: Record<string, string> = {
   redes_sociais: 'Redes Sociais', outro: 'Outro',
 }
 
-const EMPTY_FORM = { name: '', email: '', phone: '', status: 'novo', source: 'chat_ia', notes: '', desired_city: '', max_price: '' }
+const EMPTY_FORM = {
+  full_name: '', email: '', phone: '', country: '', state: '', city: '', document: '',
+  status: 'new', source: 'chat_ia', notes: ''
+}
 
 export default function Leads() {
   const [leads, setLeads] = useState<any[]>([])
@@ -46,7 +49,18 @@ export default function Leads() {
   const openNew = () => { setEditingLead(null); setForm(EMPTY_FORM); setShowForm(true) }
   const openEdit = (lead: any) => {
     setEditingLead(lead)
-    setForm({ name: lead.name, email: lead.email || '', phone: lead.phone || '', status: lead.status, source: lead.source, notes: lead.notes || '', desired_city: lead.desired_city || '', max_price: lead.max_price || '' })
+    setForm({
+      full_name: lead.full_name,
+      email: lead.email || '',
+      phone: lead.phone || '',
+      country: lead.country || '',
+      state: lead.state || '',
+      city: lead.city || '',
+      document: lead.document || '',
+      status: lead.status,
+      source: lead.source,
+      notes: lead.notes || '',
+    })
     setShowForm(true)
   }
 
@@ -106,7 +120,13 @@ export default function Leads() {
         <table>
           <thead>
             <tr>
-              <th>Nome</th><th>Contato</th><th>Status</th><th>Origem</th><th>Cidade</th><th>Orçamento</th><th>Ações</th>
+              <th>Nome</th>
+              <th>Contato</th>
+              <th>Status</th>
+              <th>Origem</th>
+              <th>Localização</th>
+              <th>Documento</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -123,7 +143,7 @@ export default function Leads() {
               </td></tr>
             ) : leads.map(lead => (
               <tr key={lead.id}>
-                <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{lead.name}</td>
+                <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{lead.full_name}</td>
                 <td>
                   <div style={{ fontSize: '0.83rem' }}>{lead.email || '—'}</div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>{lead.phone || ''}</div>
@@ -139,9 +159,11 @@ export default function Leads() {
                   </select>
                 </td>
                 <td><span className="badge badge-muted">{SOURCE_LABEL[lead.source] || lead.source}</span></td>
-                <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{lead.desired_city || '—'}</td>
-                <td style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)', color: lead.max_price ? 'var(--accent)' : 'var(--text-muted)' }}>
-                  {lead.max_price ? `R$ ${Number(lead.max_price).toLocaleString('pt-BR')}` : '—'}
+                <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  {lead.city && lead.state ? `${lead.city}/${lead.state}` : lead.city || lead.state || lead.country || '—'}
+                </td>
+                <td style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)', color: lead.document ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                  {lead.document || '—'}
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: '6px' }}>
@@ -171,17 +193,34 @@ export default function Leads() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div className="form-group">
-                <label className="form-label">Nome *</label>
-                <input className="form-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="Nome do cliente" />
+                <label className="form-label">Nome Completo *</label>
+                <input className="form-input" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} required placeholder="Nome completo do lead" />
               </div>
+              
               <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label">Email</label>
                   <input type="email" className="form-input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Telefone</label>
-                  <input className="form-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(11) 99999-9999" />
+                  <label className="form-label">Telefone / WhatsApp</label>
+                  <input className="form-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+55 11 99999-9999" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Documento (CPF/CNPJ)</label>
+                  <input className="form-input" value={form.document} onChange={e => setForm(f => ({ ...f, document: e.target.value }))} placeholder="000.000.000-00" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">País</label>
+                  <input className="form-input" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="Brasil" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Estado (UF)</label>
+                  <input className="form-input" value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} placeholder="SP" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Cidade</label>
+                  <input className="form-input" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="São Paulo" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Status</label>
@@ -195,22 +234,15 @@ export default function Leads() {
                     {Object.entries(SOURCE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Cidade desejada</label>
-                  <input className="form-input" value={form.desired_city} onChange={e => setForm(f => ({ ...f, desired_city: e.target.value }))} placeholder="São Paulo" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Orçamento máximo (R$)</label>
-                  <input type="number" className="form-input" value={form.max_price} onChange={e => setForm(f => ({ ...f, max_price: e.target.value }))} placeholder="0" />
-                </div>
               </div>
+              
               <div className="form-group">
-                <label className="form-label">Observações</label>
-                <textarea className="form-textarea" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} placeholder="Anotações sobre o lead..." />
+                <label className="form-label">Observações Livres</label>
+                <textarea className="form-textarea" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} placeholder="Anotações, preferências ou histórico rápido..." />
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowForm(false)}>Cancelar</button>
-                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleSave} disabled={saving || !form.name}>
+                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleSave} disabled={saving || !form.full_name}>
                   {saving ? <div className="spinner" /> : '💾 Salvar Lead'}
                 </button>
               </div>

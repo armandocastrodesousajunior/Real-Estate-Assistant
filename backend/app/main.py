@@ -105,18 +105,33 @@ Eventos: `agent_selected`, `token`, `done`.
 )
 
 # ─── API Pública & Scalar ───────────────────────────────────────────────────────
+from app.routers.public import chat as chat_public
+from app.routers.public import sessions as sessions_public
+from app.routers.public import leads as leads_public
 
 public_app = FastAPI(
     title="RealtyAI Public API",
-    description="API para integrações externas com os agentes.",
-    version=settings.APP_VERSION,
-    docs_url=None, # Desativa Swagger padrão
+    description="API para integração do Chat e Leads com websites e CRMs de terceiros.",
+    version="1.0.0",
+    docs_url=None, 
     redoc_url=None,
     openapi_url="/openapi.json"
 )
 
-# Inclui os routers públicos
-public_app.include_router(public_chat.router, prefix="/api/v1/chat", tags=["💬 Chat"])
+# Adiciona CORS no sub-app também
+origins = ["http://localhost:5173", "http://localhost:3000", "http://localhost:8080"]
+public_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Registra os roteadores públicos (a dependência X-API-Key está injetada em cada endpoint)
+public_app.include_router(chat_public.router, prefix="/api/v1/chat", tags=["Chat Público"])
+public_app.include_router(sessions_public.router, prefix="/api/v1/sessions", tags=["Sessões"])
+public_app.include_router(leads_public.router, prefix="/api/v1/leads", tags=["Leads"])
 
 @public_app.get("/docs", include_in_schema=False)
 async def scalar_html():

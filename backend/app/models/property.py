@@ -84,9 +84,6 @@ class Property(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relacionamentos
-    leads = relationship("Lead", back_populates="property", lazy="select")
-    
     # Multi-Tenancy
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
     workspace = relationship("Workspace", back_populates="properties")
