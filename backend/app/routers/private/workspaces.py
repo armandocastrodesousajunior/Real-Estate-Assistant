@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List
 from pydantic import BaseModel
+import secrets
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -21,6 +22,7 @@ class WorkspaceResponse(BaseModel):
     name: str
     slug: str
     owner_id: int
+    api_token: Optional[str] = None
     embedding_model: Optional[str] = None
     supervisor_model: Optional[str] = None
     supervisor_temperature: Optional[float] = None
@@ -71,7 +73,8 @@ async def create_workspace(
     workspace = Workspace(
         name=data.name,
         slug=slug,
-        owner_id=current_user.id
+        owner_id=current_user.id,
+        api_token=secrets.token_hex(32)
     )
     
     db.add(workspace)
@@ -148,6 +151,25 @@ async def update_workspace(
     if data.repair_model is not None: workspace.repair_model = data.repair_model
     if data.repair_temperature is not None: workspace.repair_temperature = data.repair_temperature
     
+    await db.commit()
+    await db.refresh(workspace)
+    return workspace
+
+@router.post("/{workspace_id}/token/regenerate", response_model=WorkspaceResponse)
+async def regenerate_workspace_token(
+    workspace_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Gera um novo API Token para o workspace (Apenas Dono)."""
+    result = await db.execute(
+        select(Workspace).where(Workspace.id == workspace_id, Workspace.owner_id == current_user.id)
+    )
+    workspace = result.scalar_one_or_none()
+    if not workspace:
+        raise HTTPException(status_code=403, detail="Apenas o dono pode gerenciar o token do workspace")
+    
+    workspace.api_token = secrets.token_hex(32)
     await db.commit()
     await db.refresh(workspace)
     return workspace

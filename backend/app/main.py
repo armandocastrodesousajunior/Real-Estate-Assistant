@@ -17,8 +17,12 @@ from app.models.conversation import Conversation, Message  # noqa: F401
 from app.models.prompt import Prompt              # noqa: F401
 from app.models.feedback import MessageFeedback   # noqa: F401
 
-# Routers
-from app.routers import auth, properties, agents, prompts, chat, leads, logs, tools, workspaces, users, super_admin, feedback
+# Routers Privados
+from app.routers.private import auth, properties, agents, prompts, chat, leads, logs, tools, workspaces, users, super_admin, feedback
+
+# Routers Públicos
+from app.routers.public import chat as public_chat
+from fastapi.responses import HTMLResponse
 
 
 @asynccontextmanager
@@ -95,10 +99,46 @@ Eventos: `agent_selected`, `token`, `done`.
     },
     license_info={"name": "MIT License"},
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/private/docs",
+    redoc_url="/private/redoc",
+    openapi_url="/private/openapi.json",
 )
+
+# ─── API Pública & Scalar ───────────────────────────────────────────────────────
+
+public_app = FastAPI(
+    title="RealtyAI Public API",
+    description="API para integrações externas com os agentes.",
+    version=settings.APP_VERSION,
+    docs_url=None, # Desativa Swagger padrão
+    redoc_url=None,
+    openapi_url="/openapi.json"
+)
+
+# Inclui os routers públicos
+public_app.include_router(public_chat.router, prefix="/api/v1/chat", tags=["💬 Chat"])
+
+@public_app.get("/docs", include_in_schema=False)
+async def scalar_html():
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>API Reference - RealtyAI</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          body { margin: 0; padding: 0; }
+        </style>
+      </head>
+      <body>
+        <script id="api-reference" data-url="/public/openapi.json"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+      </body>
+    </html>
+    """)
+
+app.mount("/public", public_app)
 
 # ─── Middlewares ──────────────────────────────────────────────────────────────
 
@@ -141,8 +181,8 @@ async def root():
         "service": "Real-Estate-Assistant API",
         "version": settings.APP_VERSION,
         "status": "online",
-        "docs": "/docs",
-        "redoc": "/redoc",
+        "docs_private": "/private/docs",
+        "docs_public": "/public/docs",
     }
 
 

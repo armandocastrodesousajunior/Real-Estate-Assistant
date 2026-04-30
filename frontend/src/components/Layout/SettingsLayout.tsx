@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { 
   User, Building, Shield, ArrowLeft, Settings as SettingsIcon,
-  ChevronRight, Brain, Cpu, MessageSquare
+  ChevronRight, Brain, Cpu, MessageSquare, Key
 } from 'lucide-react'
 
 export default function SettingsLayout() {
@@ -10,7 +10,7 @@ export default function SettingsLayout() {
   const settingsNavItems = [
     { to: '/settings', icon: User, label: 'Meu Perfil', end: true },
     { to: '/settings/workspace', icon: Building, label: 'Configurações Gerais' },
-    { to: '/settings/tokens', icon: Shield, label: 'Planos & Consumo' },
+    { to: '/settings/token', icon: Key, label: 'Token de API' },
   ]
 
   return (

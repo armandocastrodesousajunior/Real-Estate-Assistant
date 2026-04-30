@@ -183,6 +183,7 @@ export const workspacesAPI = {
   get: (id: number) => api.get(`/api/v1/workspaces/${id}`),
   create: (name: string) => api.post('/api/v1/workspaces/', { name }),
   update: (id: number, name: string) => api.put(`/api/v1/workspaces/${id}`, { name }),
+  regenerateToken: (id: number) => api.post(`/api/v1/workspaces/${id}/token/regenerate`),
   delete: (id: number) => api.delete(`/api/v1/workspaces/${id}`),
   listMembers: (id: number) => api.get(`/api/v1/workspaces/${id}/members`),
   addMember: (id: number, email: string) => api.post(`/api/v1/workspaces/${id}/members`, { email }),

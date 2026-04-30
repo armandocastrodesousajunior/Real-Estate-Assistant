@@ -103,3 +103,30 @@ async def get_current_workspace(
         )
         
     return workspace
+
+
+from fastapi.security import APIKeyHeader
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def get_workspace_by_api_token(
+    x_api_key: str = Depends(api_key_header),
+    db: AsyncSession = Depends(get_db)
+) -> Workspace:
+    """Valida o acesso externo através do token de API do workspace."""
+    if not x_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de API (X-API-Key) não fornecido"
+        )
+    
+    result = await db.execute(select(Workspace).where(Workspace.api_token == x_api_key))
+    workspace = result.scalar_one_or_none()
+    
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de API inválido"
+        )
+        
+    return workspace

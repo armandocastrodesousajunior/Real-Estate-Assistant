@@ -12,6 +12,7 @@ import Logs from './pages/Logs'
 import ToolsPage from './pages/ToolsPage'
 import Settings from './pages/Settings'
 import WorkspaceSettings from './pages/WorkspaceSettings'
+import TokenSettings from './pages/TokenSettings'
 import SuperAdmin from './pages/SuperAdmin'
 import SettingsLayout from './components/Layout/SettingsLayout'
 
@@ -59,7 +60,7 @@ function App() {
         >
           <Route index element={<Settings />} />
           <Route path="workspace" element={<WorkspaceSettings />} />
-          <Route path="tokens" element={<div className="page-container"><h2>Tokens & Billing</h2><p>Coming soon...</p></div>} />
+          <Route path="token" element={<TokenSettings />} />
         </Route>
 
         {/* Rotas de Administração Global (Painel Separado) */}

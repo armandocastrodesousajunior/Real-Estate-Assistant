@@ -20,6 +20,7 @@ class Workspace(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     slug = Column(String(100), index=True)
+    api_token = Column(String(64), unique=True, index=True, nullable=True)
     
     # Ownership
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
